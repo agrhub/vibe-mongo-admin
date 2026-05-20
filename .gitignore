@@ -1,0 +1,23 @@
+# Node dependencies
+node_modules
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+
+# Local env files
+.env
+.env.*
+!.env.example
+pnpm-lock.yaml
+.vscode/settings.json
+server/cert1.pem
+server/chain1.pem
+server/fullchain1.pem
+tmp
+server/data/*.*
+server/backups/*.*

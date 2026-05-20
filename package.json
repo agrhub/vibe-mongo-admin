@@ -1,0 +1,21 @@
+{
+  "name": "vibe-mongo-admin",
+  "version": "1.0.0",
+  "description": "Port of adminMongo to Vue 3 + Element Plus & Express JSON API",
+  "type": "module",
+  "scripts": {
+    "server-install": "npm install --prefix server",
+    "client-install": "npm install --prefix client",
+    "install-all": "npm run server-install && npm run client-install",
+    "server": "npm run dev --prefix server",
+    "client": "npm run dev --prefix client",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "build-client": "npm run build --prefix client",
+    "build-server": "npm run build --prefix server",
+    "build": "npm run build-client && npm run build-server",
+    "start": "npm run start --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

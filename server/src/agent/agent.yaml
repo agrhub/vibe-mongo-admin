@@ -1,0 +1,8 @@
+agent:
+  name: "MongoAgent"
+  model: "gemini-3.1-flash-lite"
+  instruction_file: "prompts.ts"
+  entrypoint: "agent.ts"
+  tools:
+    - type: "function_tool"
+      source: "tools/mongo.tools.ts"

@@ -1,0 +1,10 @@
+{
+  "app": {
+    "port": "4000",
+    "host": "localhost",
+    "context": "",
+    "monitoring": "true",
+    "password": "admin",
+    "locale": "en"
+  }
+}

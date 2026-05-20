@@ -1,0 +1,439 @@
+import { MongoClient, ObjectId, Db } from 'mongodb';
+
+export interface CollectionStats {
+  name: string;
+  count: number;
+  size: number;
+  avgObjSize: number;
+  storageSize: number;
+  nindexes: number;
+  totalIndexSize: number;
+}
+
+export class MongoService {
+  private activeClient: MongoClient | null = null;
+  private activeUri: string | null = null;
+  private activeConnectionName: string | null = null;
+
+  /**
+   * Connect to a MongoDB instance
+   */
+  async connect(uri: string, name: string): Promise<boolean> {
+    try {
+      if (this.activeClient) {
+        await this.disconnect();
+      }
+      console.log(`[MongoService] Connecting to MongoDB: ${name} (URI: ${uri.replace(/:([^@:]+)@/, ':****@')})`);
+      const client = new MongoClient(uri, {
+        connectTimeoutMS: 5000,
+        serverSelectionTimeoutMS: 5000
+      });
+      await client.connect();
+      
+      // Ping database to confirm validity
+      await client.db('admin').command({ ping: 1 });
+      
+      this.activeClient = client;
+      this.activeUri = uri;
+      this.activeConnectionName = name;
+      console.log(`[MongoService] Connected successfully to ${name}`);
+      return true;
+    } catch (err) {
+      console.error(`[MongoService] Connection failed to ${name}:`, err);
+      throw err;
+    }
+  }
+
+  /**
+   * Disconnect from current MongoDB instance
+   */
+  async disconnect(): Promise<void> {
+    if (this.activeClient) {
+      await this.activeClient.close();
+      this.activeClient = null;
+      this.activeUri = null;
+      this.activeConnectionName = null;
+      console.log('[MongoService] Disconnected from active database connection');
+    }
+  }
+
+  /**
+   * Get active connection info
+   */
+  getActiveInfo() {
+    return {
+      connected: this.activeClient !== null,
+      name: this.activeConnectionName,
+      uri: this.activeUri ? this.activeUri.replace(/:([^@:]+)@/, ':****@') : null
+    };
+  }
+
+  /**
+   * Expose raw connection URI (decrypted)
+   */
+  getActiveUri(): string | null {
+    return this.activeUri;
+  }
+
+  /**
+   * Directly set the active connection client, URI, and name
+   */
+  setActiveConnection(client: MongoClient, uri: string, name: string): void {
+    this.activeClient = client;
+    this.activeUri = uri;
+    this.activeConnectionName = name;
+  }
+
+  /**
+   * Safe getter for the active MongoClient
+   */
+  getClient(): MongoClient {
+    if (!this.activeClient) {
+      throw new Error('No active database connection. Please connect to a MongoDB server first.');
+    }
+    return this.activeClient;
+  }
+
+  /**
+   * Safe getter for a DB
+   */
+  getDb(dbName: string): Db {
+    return this.getClient().db(dbName);
+  }
+
+  /**
+   * List all databases
+   */
+  async listDatabases(): Promise<any[]> {
+    const client = this.getClient();
+    const result = await client.db('admin').admin().listDatabases();
+    return result.databases;
+  }
+
+  /**
+   * Drop a database
+   */
+  async dropDatabase(dbName: string): Promise<boolean> {
+    const client = this.getClient();
+    await client.db(dbName).dropDatabase();
+    return true;
+  }
+
+  /**
+   * Create a new database with its first collection
+   */
+  async createDatabase(dbName: string, collectionName: string): Promise<boolean> {
+    const db = this.getDb(dbName);
+    // Databases in MongoDB are created lazily. We create the collection first,
+    // then insert a placeholder document to force creation of the db.
+    await db.createCollection(collectionName);
+    const col = db.collection(collectionName);
+    await col.insertOne({
+      _id: new ObjectId(),
+      info: 'Database successfully initialized via VibeMongo portal.'
+    });
+    return true;
+  }
+
+  /**
+   * List database users
+   */
+  async listDatabaseUsers(dbName: string): Promise<any[]> {
+    const db = this.getDb(dbName);
+    try {
+      const result = await db.command({ usersInfo: 1 });
+      return result.users || [];
+    } catch (err: any) {
+      console.error(`[MongoService] Error listing users for ${dbName}:`, err);
+      throw err;
+    }
+  }
+
+  /**
+   * Create database user
+   */
+  async createDatabaseUser(
+    dbName: string,
+    username: string,
+    password: string,
+    roles: string[]
+  ): Promise<boolean> {
+    const db = this.getDb(dbName);
+    await db.command({
+      createUser: username,
+      pwd: password,
+      roles: roles.map(r => ({ role: r, db: dbName }))
+    });
+    return true;
+  }
+
+  /**
+   * Delete database user
+   */
+  async deleteDatabaseUser(dbName: string, username: string): Promise<boolean> {
+    const db = this.getDb(dbName);
+    await db.command({ dropUser: username });
+    return true;
+  }
+
+  /**
+   * Export collection as raw JSON documents array
+   */
+  async exportCollection(dbName: string, collectionName: string): Promise<any[]> {
+    const db = this.getDb(dbName);
+    const col = db.collection(collectionName);
+    return await col.find({}).toArray();
+  }
+
+  /**
+   * List all collections in a database
+   */
+  async listCollections(dbName: string): Promise<CollectionStats[]> {
+    const db = this.getDb(dbName);
+    const collections = await db.listCollections().toArray();
+    const statsList: CollectionStats[] = [];
+
+    for (const col of collections) {
+      try {
+        const stats = await db.command({ collStats: col.name });
+        statsList.push({
+          name: col.name,
+          count: stats.count,
+          size: stats.size,
+          avgObjSize: stats.avgObjSize || 0,
+          storageSize: stats.storageSize || 0,
+          nindexes: stats.nindexes || 0,
+          totalIndexSize: stats.totalIndexSize || 0
+        });
+      } catch (err) {
+        // Fallback if collStats fails (e.g. System collections)
+        const count = await db.collection(col.name).countDocuments();
+        statsList.push({
+          name: col.name,
+          count,
+          size: 0,
+          avgObjSize: 0,
+          storageSize: 0,
+          nindexes: 0,
+          totalIndexSize: 0
+        });
+      }
+    }
+    return statsList;
+  }
+
+  /**
+   * Create a new collection
+   */
+  async createCollection(dbName: string, collectionName: string): Promise<boolean> {
+    const db = this.getDb(dbName);
+    await db.createCollection(collectionName);
+    return true;
+  }
+
+  /**
+   * Drop an existing collection
+   */
+  async dropCollection(dbName: string, collectionName: string): Promise<boolean> {
+    const db = this.getDb(dbName);
+    await db.collection(collectionName).drop();
+    return true;
+  }
+
+  /**
+   * Paginated documents search with dynamic query support
+   */
+  async findDocuments(
+    dbName: string,
+    collectionName: string,
+    query: Record<string, any> = {},
+    sort: Record<string, any> = {},
+    skip = 0,
+    limit = 20
+  ): Promise<{ documents: any[]; total: number }> {
+    const db = this.getDb(dbName);
+    const col = db.collection(collectionName);
+
+    // Parse ID filtering if '_id' is specified as string and fits ObjectId pattern
+    const processedQuery = { ...query };
+    if (processedQuery._id && typeof processedQuery._id === 'string' && ObjectId.isValid(processedQuery._id)) {
+      processedQuery._id = new ObjectId(processedQuery._id);
+    } else if (processedQuery._id && typeof processedQuery._id === 'object' && processedQuery._id.$oid) {
+      processedQuery._id = new ObjectId(processedQuery._id.$oid);
+    }
+
+    const total = await col.countDocuments(processedQuery);
+    const documents = await col
+      .find(processedQuery)
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    return { documents, total };
+  }
+
+  /**
+   * Insert a document
+   */
+  async insertDocument(dbName: string, collectionName: string, doc: Record<string, any>): Promise<any> {
+    const db = this.getDb(dbName);
+    const col = db.collection(collectionName);
+    
+    // Auto-generate ObjectId if not specified
+    const processedDoc = { ...doc };
+    if (processedDoc._id && typeof processedDoc._id === 'string' && ObjectId.isValid(processedDoc._id)) {
+      processedDoc._id = new ObjectId(processedDoc._id);
+    }
+
+    const result = await col.insertOne(processedDoc);
+    return { ...processedDoc, _id: result.insertedId };
+  }
+
+  /**
+   * Update a document
+   */
+  async updateDocument(dbName: string, collectionName: string, idStr: string, updateDoc: Record<string, any>): Promise<any> {
+    const db = this.getDb(dbName);
+    const col = db.collection(collectionName);
+
+    let selector: Record<string, any> = { _id: idStr };
+    if (ObjectId.isValid(idStr)) {
+      selector = { _id: new ObjectId(idStr) };
+    }
+
+    // Strip _id from update document to prevent mutating immutable fields
+    const { _id, ...cleanUpdate } = updateDoc;
+
+    const result = await col.replaceOne(selector, cleanUpdate);
+    if (result.matchedCount === 0) {
+      throw new Error(`Document with ID ${idStr} not found`);
+    }
+    return { _id: idStr, ...cleanUpdate };
+  }
+
+  /**
+   * Delete a document
+   */
+  async deleteDocument(dbName: string, collectionName: string, idStr: string): Promise<boolean> {
+    const db = this.getDb(dbName);
+    const col = db.collection(collectionName);
+
+    let selector: Record<string, any> = { _id: idStr };
+    if (ObjectId.isValid(idStr)) {
+      selector = { _id: new ObjectId(idStr) };
+    }
+
+    const result = await col.deleteOne(selector);
+    return (result.deletedCount ?? 0) > 0;
+  }
+
+  /**
+   * List indexes on a collection
+   */
+  async listIndexes(dbName: string, collectionName: string): Promise<any[]> {
+    const db = this.getDb(dbName);
+    return await db.collection(collectionName).indexes();
+  }
+
+  /**
+   * Create an index
+   */
+  async createIndex(dbName: string, collectionName: string, keys: Record<string, any>, options: Record<string, any> = {}): Promise<string> {
+    const db = this.getDb(dbName);
+    return await db.collection(collectionName).createIndex(keys, options);
+  }
+
+  /**
+   * Delete an index
+   */
+  async deleteIndex(dbName: string, collectionName: string, indexName: string): Promise<boolean> {
+    const db = this.getDb(dbName);
+    await db.collection(collectionName).dropIndex(indexName);
+    return true;
+  }
+
+  /**
+   * Smart schema visualizer: samples 20 documents and parses types, occurrence percentage, and samples.
+   */
+  async getCollectionSchema(dbName: string, collectionName: string): Promise<Record<string, any>> {
+    const db = this.getDb(dbName);
+    const col = db.collection(collectionName);
+    const sampleDocs = await col.find().limit(20).toArray();
+
+    if (sampleDocs.length === 0) {
+      return { message: 'Collection is empty. Schema cannot be analyzed.' };
+    }
+
+    const schema: Record<string, { types: Set<string>; count: number; examples: any[] }> = {};
+
+    sampleDocs.forEach(doc => {
+      Object.entries(doc).forEach(([key, val]) => {
+        if (!schema[key]) {
+          schema[key] = { types: new Set(), count: 0, examples: [] };
+        }
+        
+        schema[key].count++;
+        let typeStr: string = typeof val;
+        
+        if (val === null) {
+          typeStr = 'null';
+        } else if (Array.isArray(val)) {
+          typeStr = 'array';
+        } else if (val instanceof Date) {
+          typeStr = 'date';
+        } else if (val instanceof ObjectId) {
+          typeStr = 'objectId';
+        }
+
+        schema[key].types.add(typeStr);
+        if (schema[key].examples.length < 3 && val !== undefined) {
+          schema[key].examples.push(val);
+        }
+      });
+    });
+
+    const parsedSchema: Record<string, any> = {};
+    Object.entries(schema).forEach(([key, meta]) => {
+      parsedSchema[key] = {
+        types: Array.from(meta.types),
+        occurrenceRate: Math.round((meta.count / sampleDocs.length) * 100),
+        examples: meta.examples
+      };
+    });
+
+    return parsedSchema;
+  }
+
+  /**
+   * Fetch server telemetry & resource stats
+   */
+  async getServerStatus(): Promise<any> {
+    const client = this.getClient();
+    try {
+      // Runs serverStatus administrative call
+      const status = await client.db('admin').command({ serverStatus: 1 });
+      return {
+        version: status.version,
+        uptime: status.uptime,
+        connections: status.connections,
+        network: status.network,
+        opcounters: status.opcounters,
+        mem: status.mem,
+        pid: status.pid
+      };
+    } catch (err) {
+      // Graceful fallback for environments with limited administrative permissions
+      return {
+        version: 'Unknown (limited credentials)',
+        uptime: 0,
+        connections: { current: 1, available: 100 },
+        network: { bytesIn: 0, bytesOut: 0 },
+        opcounters: { insert: 0, query: 0, update: 0, delete: 0 },
+        mem: { virtual: 0, resident: 0 }
+      };
+    }
+  }
+}
+
+export const mongoService = new MongoService();

@@ -1,7 +1,7 @@
 import { Router, Request as ExpressRequest, Response } from 'express';
 type Request = ExpressRequest<any>;
-import { agentChatService } from '../services/AgentChatService.js';
-import { mongoService } from '../services/MongoService.js';
+import { agentChatService } from '@/services/AgentChatService.js';
+import { mongoService } from '@/services/MongoService.js';
 
 const router = Router();
 

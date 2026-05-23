@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.mongoTools = exports.allTools = void 0;
 const adk_1 = require("@google/adk");
 const mongoTools = __importStar(require("./mongo.tools.js"));
+const connectionTools = __importStar(require("./connection.tools.js"));
 const toolSchemas = {
     listDatabases: {
         type: 'OBJECT',
@@ -145,10 +146,53 @@ const toolSchemas = {
         type: 'OBJECT',
         properties: {
             db: { type: 'STRING', description: 'The database name to switch to' },
-            collection: { type: 'STRING', description: 'The collection name to switch to' }
+            collection: { type: 'STRING', description: 'The collection name to switch to' },
+            tab: { type: 'STRING', description: 'The tab name to switch to (e.g. general, schema, indexes, analysis, documents)' }
         }
     },
     getServerStatus: {
+        type: 'OBJECT',
+        properties: {}
+    },
+    checkArizePhoenixMetrics: {
+        type: 'OBJECT',
+        properties: {}
+    },
+    explainQueryPlan: {
+        type: 'OBJECT',
+        properties: {
+            db: { type: 'STRING', description: 'The database name' },
+            collection: { type: 'STRING', description: 'The collection name' },
+            filter: { type: 'STRING', description: 'BSON filter JSON string (e.g. \'{"movie_id": {"$oid": "..."}}\')' },
+            pipeline: { type: 'STRING', description: 'Optional aggregation pipeline JSON string' }
+        },
+        required: ['db', 'collection']
+    },
+    addConnection: {
+        type: 'OBJECT',
+        properties: {
+            name: { type: 'STRING', description: 'Friendly name for the connection (e.g. "Production")' },
+            uri: { type: 'STRING', description: 'MongoDB connection string (uri)' }
+        },
+        required: ['name', 'uri']
+    },
+    updateConnection: {
+        type: 'OBJECT',
+        properties: {
+            currentName: { type: 'STRING', description: 'The current name of the connection profile' },
+            newName: { type: 'STRING', description: 'The new name for the connection profile' },
+            newUri: { type: 'STRING', description: 'The new MongoDB connection URI' }
+        },
+        required: ['currentName', 'newName', 'newUri']
+    },
+    deleteConnection: {
+        type: 'OBJECT',
+        properties: {
+            name: { type: 'STRING', description: 'The name of the connection profile to delete' }
+        },
+        required: ['name']
+    },
+    listAllConnections: {
         type: 'OBJECT',
         properties: {}
     }
@@ -176,6 +220,7 @@ function toFunctionTools(module) {
         .filter((tool) => tool !== null);
 }
 exports.allTools = [
-    ...toFunctionTools(mongoTools)
+    ...toFunctionTools(mongoTools),
+    ...toFunctionTools(connectionTools)
 ];
 exports.mongoTools = exports.allTools;

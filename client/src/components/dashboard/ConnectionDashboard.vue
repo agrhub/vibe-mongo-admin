@@ -51,7 +51,7 @@
               <span>{{ store.t('Databases') }}</span>
               <el-button 
                 type="primary" 
-                size="small" 
+                size="small" text bg round
                 :icon="Plus"
                 @click="showCreateDbDialog = true"
               >
@@ -77,7 +77,7 @@
               <template #default="scope">
                 <el-button 
                   type="primary" 
-                  link 
+                  link size="small"
                   :icon="Edit"
                   @click="openRenameDbDialog(scope.row.name)"
                 >
@@ -85,7 +85,7 @@
                 </el-button>
                 <el-button 
                   type="danger" 
-                  link 
+                  link size="small"
                   :icon="Delete"
                   @click="handleDropDb(scope.row.name)"
                 >
@@ -109,7 +109,7 @@
                 :http-request="handleUploadBackup"
                 accept=".zip"
               >
-                <el-button type="primary" link :icon="Upload">
+                <el-button type="primary" round text bg size="small" :icon="Upload">
                   {{ store.t('Upload Backup') }}
                 </el-button>
               </el-upload>
@@ -185,8 +185,8 @@
       </el-form>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="showCreateDbDialog = false">{{ store.t('Cancel') }}</el-button>
-          <el-button type="primary" @click="handleCreateDb" :loading="creatingDb">{{ store.t('Create') }}</el-button>
+          <el-button @click="showCreateDbDialog = false" round>{{ store.t('Cancel') }}</el-button>
+          <el-button type="primary" round @click="handleCreateDb" :loading="creatingDb">{{ store.t('Create') }}</el-button>
         </span>
       </template>
     </el-dialog>
@@ -203,8 +203,8 @@
       </el-form>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="showRenameDbDialog = false">{{ store.t('Cancel') }}</el-button>
-          <el-button type="primary" @click="renameDatabase" :loading="renamingDb">{{ store.t('Rename') }}</el-button>
+          <el-button @click="showRenameDbDialog = false" round>{{ store.t('Cancel') }}</el-button>
+          <el-button type="primary" round @click="renameDatabase" :loading="renamingDb">{{ store.t('Rename') }}</el-button>
         </span>
       </template>
     </el-dialog>
@@ -246,8 +246,8 @@
       </el-form>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="showRestoreDialog = false">{{ store.t('Cancel') }}</el-button>
-          <el-button type="primary" @click="confirmRestoreDb" :loading="restoringDb" :disabled="!restoreTargetDb">{{ store.t('Restore') }}</el-button>
+          <el-button @click="showRestoreDialog = false" round>{{ store.t('Cancel') }}</el-button>
+          <el-button type="primary" round @click="confirmRestoreDb" :loading="restoringDb" :disabled="!restoreTargetDb">{{ store.t('Restore') }}</el-button>
         </span>
       </template>
     </el-dialog>
@@ -439,7 +439,7 @@ const handleDropDb = (dbName) => {
 const handleUploadBackup = async (options) => {
   const file = options.file;
   const formData = new FormData();
-  formData.append('backup_file', file);
+  formData.append('backupFile', file);
   try {
     const res = await axios.post(`/api/${store.activeConnection}/backup/upload`, formData, {
       headers: {

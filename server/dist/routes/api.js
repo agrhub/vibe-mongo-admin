@@ -28,16 +28,16 @@ router.all('/api/*', function (req, res, next) {
     }
 });
 // Import sub-routers
-const auth_js_1 = __importDefault(require("./api/auth.js"));
-const connections_js_1 = __importDefault(require("./api/connections.js"));
-const databases_js_1 = __importDefault(require("./api/databases.js"));
-const backups_js_1 = __importDefault(require("./api/backups.js"));
-const collections_js_1 = __importDefault(require("./api/collections.js"));
-const indexes_js_1 = __importDefault(require("./api/indexes.js"));
-const users_js_1 = __importDefault(require("./api/users.js"));
-const documents_js_1 = __importDefault(require("./api/documents.js"));
-const monitoring_js_1 = __importDefault(require("./api/monitoring.js"));
-const agent_js_1 = __importDefault(require("./api/agent.js"));
+const auth_js_1 = __importDefault(require("./auth.js"));
+const connections_js_1 = __importDefault(require("./connections.js"));
+const databases_js_1 = __importDefault(require("./databases.js"));
+const backups_js_1 = __importDefault(require("./backups.js"));
+const collections_js_1 = __importDefault(require("./collections.js"));
+const indexes_js_1 = __importDefault(require("./indexes.js"));
+const users_js_1 = __importDefault(require("./users.js"));
+const documents_js_1 = __importDefault(require("./documents.js"));
+const monitoring_js_1 = __importDefault(require("./monitoring.js"));
+const agent_js_1 = __importDefault(require("./agent.js"));
 // Mount sub-routers
 router.use(auth_js_1.default);
 router.use(connections_js_1.default);

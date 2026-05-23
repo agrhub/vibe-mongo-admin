@@ -1,9 +1,10 @@
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
-import { encrypt, decrypt } from '../utils/crypto.js';
+import { encrypt, decrypt } from '@/utils/crypto';
 import path from 'path';
 
-const DB_PATH = path.join(__dirname, '..', '..', 'data', 'connections.db');
+const isProd = process.env.NODE_ENV === 'production';
+const DB_PATH = path.join(__dirname, '../../data', isProd ? 'connections.db?nolock=1' : 'connections.db');
 
 export interface MongoConnectionInfo {
   id?: number;
@@ -17,9 +18,11 @@ export class ConnectionStore {
 
   private async getDb(): Promise<Database> {
     if (!this.dbPromise) {
+      const dbFilename = 'file:' + DB_PATH;
       this.dbPromise = open({
-        filename: DB_PATH,
-        driver: sqlite3.Database
+        filename: dbFilename,
+        driver: sqlite3.Database,
+        mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE | sqlite3.OPEN_URI
       }).then(async (db) => {
         // Initialize schema
         await db.exec(`

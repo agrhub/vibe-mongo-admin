@@ -1,7 +1,7 @@
 import { Router, Request as ExpressRequest, Response } from 'express';
 type Request = ExpressRequest<any>;
-import * as common from './common.js';
-import { connectionStore } from '../services/ConnectionStore.js';
+import * as common from './common';
+import { connectionStore } from '@/services/ConnectionStore';
 
 const router = Router();
 
@@ -28,7 +28,7 @@ router.get('/api/connections', async function (req: Request, res: Response) {
 
 // Add connection
 router.post('/api/connections/add', async function (req: Request, res: Response) {
-    const connPool = require('../../utils/connections');
+    const connPool = require('@/utils/connections');
 
     var conn_name = req.body.name;
     var conn_string = req.body.string;
@@ -80,7 +80,7 @@ router.post('/api/connections/add', async function (req: Request, res: Response)
 
 // Update connection
 router.post('/api/connections/update', async function (req: Request, res: Response) {
-    const connPool = require('../../utils/connections');
+    const connPool = require('@/utils/connections');
 
     var curr_config = req.body.curr_config;
     var conn_name = req.body.conn_name;
@@ -124,7 +124,7 @@ router.post('/api/connections/update', async function (req: Request, res: Respon
 
 // Delete connection
 router.post('/api/connections/delete', async function (req: Request, res: Response) {
-    const connPool = require('../../utils/connections');
+    const connPool = require('@/utils/connections');
     var curr_config = req.body.curr_config;
 
     if (!curr_config) {

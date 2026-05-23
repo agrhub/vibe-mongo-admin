@@ -1,18 +1,21 @@
 <template>
-  <div class="login-wrapper">
+  <div class="login-wrapper" @mousemove="handleMouseMove" @mouseleave="handleMouseLeave">
+    <canvas ref="bgCanvas" class="login-canvas-bg"></canvas>
+    
     <el-card class="login-card">
       <div class="login-header">
         <div class="login-actions-container">
           <!-- Theme selector dropdown -->
           <el-dropdown trigger="click" @command="handleThemeChange" size="small">
-            <span class="action-btn">
+            <el-button
+              text bg round size="small">
               <el-icon>
                 <Sunny v-if="store.theme === 'light'" />
                 <Moon v-else-if="store.theme === 'dark'" />
                 <Monitor v-else />
               </el-icon>
               {{ store.t(themeLabel) }}
-            </span>
+            </el-button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="light" :class="{ 'is-active': store.theme === 'light' }">
@@ -30,10 +33,11 @@
 
           <!-- Language selector dropdown -->
           <el-dropdown trigger="click" @command="handleLocaleChange" size="small">
-            <span class="action-btn">
+            <el-button
+              text bg round size="small">
               <el-icon><Location /></el-icon>
               {{ store.activeLocale.toUpperCase() }}
-            </span>
+            </el-button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item 
@@ -49,7 +53,7 @@
           </el-dropdown>
         </div>
         <div class="logo-circle">
-          <el-icon class="logo-icon"><Grid /></el-icon>
+          <el-image src="/favicon.ico" style="width: 48px; height: 48px;" class="brand-logo" />
         </div>
         <h1 class="logo-title">VibeMongo</h1>
         <p class="logo-subtitle">{{ store.t('Minimalist MongoDB Administration') }}</p>
@@ -69,7 +73,7 @@
 
         <div class="form-actions">
           <el-button 
-            type="primary" 
+            type="primary" round
             native-type="submit" 
             size="large" 
             :loading="loggingIn"
@@ -84,11 +88,149 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue';
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { store } from '../stores';
 import { Lock, Location, Grid, Sunny, Moon, Monitor } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
+
+// --- Particle Background Animation ---
+const bgCanvas = ref(null);
+let animationFrameId = null;
+let particles = [];
+let mouse = { x: null, y: null, radius: 150 };
+
+const handleMouseMove = (e) => {
+  mouse.x = e.x;
+  mouse.y = e.y;
+};
+const handleMouseLeave = () => {
+  mouse.x = null;
+  mouse.y = null;
+};
+
+class Particle {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.x = Math.random() * canvas.width;
+    this.y = Math.random() * canvas.height;
+    this.size = Math.random() * 2 + 1;
+    this.speedX = (Math.random() * 2) - 1;
+    this.speedY = (Math.random() * 2) - 1;
+  }
+  update() {
+    this.x += this.speedX;
+    this.y += this.speedY;
+
+    if (this.x < 0 || this.x > this.canvas.width) this.speedX *= -1;
+    if (this.y < 0 || this.y > this.canvas.height) this.speedY *= -1;
+
+    // Mouse interaction
+    if (mouse.x && mouse.y) {
+      let dx = mouse.x - this.x;
+      let dy = mouse.y - this.y;
+      let distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < mouse.radius) {
+        const forceDirectionX = dx / distance;
+        const forceDirectionY = dy / distance;
+        const force = (mouse.radius - distance) / mouse.radius;
+        // Push particles away slightly
+        this.x -= forceDirectionX * force * 2;
+        this.y -= forceDirectionY * force * 2;
+      }
+    }
+  }
+  draw(ctx, baseColor) {
+    ctx.fillStyle = baseColor;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+const initCanvas = () => {
+  const canvas = bgCanvas.value;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  particles = [];
+  const numberOfParticles = (canvas.width * canvas.height) / 10000;
+  for (let i = 0; i < numberOfParticles; i++) {
+    particles.push(new Particle(canvas));
+  }
+
+  const animate = () => {
+    // Semi-transparent clear to allow trails
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    const isDark = store.theme === 'dark' || (store.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const baseColor = isDark ? 'rgba(13, 148, 136, 0.4)' : 'rgba(13, 148, 136, 0.2)';
+    const lineColor = isDark ? 'rgba(13, 148, 136,' : 'rgba(13, 148, 136,';
+
+    for (let i = 0; i < particles.length; i++) {
+      particles[i].update();
+      particles[i].draw(ctx, isDark ? '#0d9488' : '#0f766e');
+      
+      // Connect points
+      for (let j = i; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const distance = dx * dx + dy * dy;
+        
+        if (distance < 15000) {
+          const opacity = 1 - (distance / 15000);
+          ctx.strokeStyle = `${lineColor}${opacity * 0.5})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.stroke();
+        }
+      }
+
+      // Connect to mouse
+      if (mouse.x && mouse.y) {
+        const dx = particles[i].x - mouse.x;
+        const dy = particles[i].y - mouse.y;
+        const distance = dx * dx + dy * dy;
+        if (distance < mouse.radius * mouse.radius) {
+          const opacity = 1 - (distance / (mouse.radius * mouse.radius));
+          ctx.strokeStyle = `${lineColor}${opacity * 0.8})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(mouse.x, mouse.y);
+          ctx.stroke();
+        }
+      }
+    }
+    animationFrameId = requestAnimationFrame(animate);
+  };
+
+  animate();
+};
+
+const handleResize = () => {
+  if (bgCanvas.value) {
+    bgCanvas.value.width = window.innerWidth;
+    bgCanvas.value.height = window.innerHeight;
+    initCanvas();
+  }
+};
+
+onMounted(() => {
+  initCanvas();
+  window.addEventListener('resize', handleResize);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize);
+  if (animationFrameId) cancelAnimationFrame(animationFrameId);
+});
+// --- End Animation ---
 
 const themeLabel = computed(() => {
   if (store.theme === 'light') return 'Light';
@@ -143,24 +285,38 @@ const handleLogin = async () => {
 </script>
 
 <style scoped>
+.login-canvas-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none; /* Let events pass to the wrapper */
+}
+
 .login-wrapper {
+  position: relative;
   width: 100vw;
   height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
   background-color: var(--bg-primary);
-  background-image: radial-gradient(circle at 10% 20%, rgba(13, 148, 136, 0.03) 0%, transparent 40%),
-                    radial-gradient(circle at 90% 80%, rgba(13, 148, 136, 0.03) 0%, transparent 40%);
+  overflow: hidden;
 }
 
 .login-card {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 420px;
   padding: 1.5rem;
   border-radius: var(--radius-lg) !important;
-  box-shadow: var(--shadow-lg) !important;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2) !important;
   background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(10px);
 }
 
 .login-card:hover {

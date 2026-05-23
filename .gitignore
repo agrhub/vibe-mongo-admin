@@ -1,5 +1,6 @@
 # Node dependencies
 node_modules
+package-lock.json
 # Logs
 logs
 *.log
@@ -21,3 +22,5 @@ server/fullchain1.pem
 tmp
 server/data/*.*
 server/backups/*.*
+cloud-agent.cmd
+cloud-run.cmd

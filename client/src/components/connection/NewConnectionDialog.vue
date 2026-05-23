@@ -29,8 +29,8 @@
     </el-form>
     <template #footer>
       <span class="dialog-footer">
-        <el-button @click="visible = false">{{ store.t('Cancel') }}</el-button>
-        <el-button type="primary" @click="saveConnection" :loading="saving">{{ store.t('Save') }}</el-button>
+        <el-button @click="visible = false" round>{{ store.t('Cancel') }}</el-button>
+        <el-button type="primary" round @click="saveConnection" :loading="saving">{{ store.t('Save') }}</el-button>
       </span>
     </template>
   </el-dialog>

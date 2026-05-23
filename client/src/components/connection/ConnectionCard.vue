@@ -32,7 +32,7 @@
     <!-- Card actions -->
     <div class="card-footer-box">
       <el-button 
-        type="primary" 
+        type="primary" round
         class="connect-btn"
         @click="handleConnect"
       >

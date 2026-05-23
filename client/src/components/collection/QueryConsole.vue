@@ -21,10 +21,10 @@
             {{ store.t('Quick Filter Builder') }}
           </span>
           <div class="builder-actions">
-            <el-button size="small" type="primary" plain :icon="Plus" @click="addRule">
+            <el-button size="small" round type="primary" plain :icon="Plus" @click="addRule">
               {{ store.t('Add Rule') }}
             </el-button>
-            <el-button size="small" :icon="RefreshLeft" @click="clearRules" v-if="rules.length > 0">
+            <el-button size="small" round :icon="RefreshLeft" @click="clearRules" v-if="rules.length > 0">
               {{ store.t('Clear Rules') }}
             </el-button>
           </div>
@@ -126,12 +126,12 @@
 
       <!-- Action row -->
       <div class="query-actions-row">
-        <el-button type="danger" plain :icon="Delete" @click="$emit('mass-delete')" :disabled="totalDocs === 0">
+        <el-button type="danger" round plain :icon="Delete" @click="$emit('mass-delete')" :disabled="totalDocs === 0">
           {{ store.t('Mass Delete') }}
         </el-button>
         <div class="query-btn-group">
-          <el-button @click="handleReset">{{ store.t('Reset') }}</el-button>
-          <el-button type="primary" :icon="Search" @click="$emit('search')">
+          <el-button round @click="handleReset">{{ store.t('Reset') }}</el-button>
+          <el-button type="primary" round :icon="Search" @click="$emit('search')">
             {{ store.t('Find') }}
           </el-button>
         </div>

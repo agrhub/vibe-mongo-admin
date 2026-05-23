@@ -31,7 +31,7 @@ router.post('/api/:conn/:db/:coll/documents', function (req: Request, res: Respo
         skip = (page - 1) * docs_per_page;
     }
 
-    var query_obj = {};
+    var query_obj: any = {};
     var validQuery = true;
     var queryMessage = '';
 
@@ -45,6 +45,36 @@ router.post('/api/:conn/:db/:coll/documents', function (req: Request, res: Respo
         }
     }
 
+    if (req.body.columnFilters && typeof req.body.columnFilters === 'object') {
+        const filterConditions: any[] = [];
+        Object.entries(req.body.columnFilters).forEach(([key, val]) => {
+            if (val && typeof val === 'string' && val.trim()) {
+                // If filtering by _id, match exactly if it looks like ObjectId, otherwise match as string regex
+                if (key === '_id') {
+                    if (BSON.ObjectId.isValid(val.trim())) {
+                        filterConditions.push({ _id: new BSON.ObjectId(val.trim()) });
+                    } else {
+                        filterConditions.push({ _id: { $regex: val.trim(), $options: 'i' } });
+                    }
+                } else {
+                    filterConditions.push({ [key]: { $regex: val.trim(), $options: 'i' } });
+                }
+            }
+        });
+        if (filterConditions.length > 0) {
+            if (Object.keys(query_obj).length > 0) {
+                query_obj = { $and: [query_obj, ...filterConditions] };
+            } else {
+                query_obj = filterConditions.length === 1 ? filterConditions[0] : { $and: filterConditions };
+            }
+        }
+    }
+
+    var sort_obj: any = {};
+    if (req.body.sort && typeof req.body.sort === 'object') {
+        sort_obj = req.body.sort;
+    }
+
     if (!validQuery) {
         return res.status(200).json({
             data: [],
@@ -55,7 +85,7 @@ router.post('/api/:conn/:db/:coll/documents', function (req: Request, res: Respo
         });
     }
 
-    mongo_db.collection(req.params.coll).find(query_obj, { skip: skip, limit: docs_per_page }).toArray()
+    mongo_db.collection(req.params.coll).find(query_obj, { skip: skip, limit: docs_per_page }).sort(sort_obj).toArray()
         .then(function (result: any) {
             mongo_db.collection(req.params.coll).find({}, { skip: skip, limit: docs_per_page }).toArray()
                 .then(function (simpleSearchFields: any) {

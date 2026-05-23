@@ -6,16 +6,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.connectionStore = exports.ConnectionStore = void 0;
 const sqlite3_1 = __importDefault(require("sqlite3"));
 const sqlite_1 = require("sqlite");
-const crypto_js_1 = require("../utils/crypto.js");
+const crypto_1 = require("../utils/crypto");
 const path_1 = __importDefault(require("path"));
-const DB_PATH = path_1.default.join(__dirname, '..', '..', 'data', 'connections.db');
+const isProd = process.env.NODE_ENV === 'production';
+const DB_PATH = path_1.default.join(__dirname, '../../data', isProd ? 'connections.db?nolock=1' : 'connections.db');
 class ConnectionStore {
     dbPromise = null;
     async getDb() {
         if (!this.dbPromise) {
+            const dbFilename = 'file:' + DB_PATH;
             this.dbPromise = (0, sqlite_1.open)({
-                filename: DB_PATH,
-                driver: sqlite3_1.default.Database
+                filename: dbFilename,
+                driver: sqlite3_1.default.Database,
+                mode: sqlite3_1.default.OPEN_READWRITE | sqlite3_1.default.OPEN_CREATE | sqlite3_1.default.OPEN_URI
             }).then(async (db) => {
                 // Initialize schema
                 await db.exec(`
@@ -39,7 +42,7 @@ class ConnectionStore {
         const rows = await db.all('SELECT * FROM connections ORDER BY id DESC');
         return rows.map(row => ({
             ...row,
-            uri: (0, crypto_js_1.decrypt)(row.uri)
+            uri: (0, crypto_1.decrypt)(row.uri)
         }));
     }
     /**
@@ -47,7 +50,7 @@ class ConnectionStore {
      */
     async saveConnection(name, uri) {
         const db = await this.getDb();
-        const encryptedUri = (0, crypto_js_1.encrypt)(uri);
+        const encryptedUri = (0, crypto_1.encrypt)(uri);
         // Check if name already exists
         const existing = await db.get('SELECT id FROM connections WHERE name = ?', name);
         if (existing) {
@@ -75,7 +78,7 @@ class ConnectionStore {
             return null;
         return {
             ...row,
-            uri: (0, crypto_js_1.decrypt)(row.uri)
+            uri: (0, crypto_1.decrypt)(row.uri)
         };
     }
     /**

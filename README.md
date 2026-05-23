@@ -2,7 +2,7 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fcamtruong512%2Fvibe-mongo-admin&env=PASSWORD,ENCRYPTION_KEY,AGENT_MODEL,GOOGLE_CLOUD_PROJECT,GOOGLE_CLOUD_LOCATION,GOOGLE_GENAI_USE_VERTEXAI)
 
-> A modern MongoDB administration dashboard powered by **Vue 3**, **Express**, **Google ADK (Agent Development Kit)**, and the **MongoDB MCP Server**.
+> A modern MongoDB administration dashboard powered by **Vue 3**, **Express**, **Google ADK (Agent Development Kit)**, the **MongoDB MCP Server**, and the **ArizeAI Phoenix MCP** for agent monitoring.
 
 ---
 
@@ -17,6 +17,25 @@
 | [Deploy — Cloud Run](./docs/DEPLOY_CLOUD_RUN.md) | Step-by-step deploy to Google Cloud Run |
 | [Deploy — Cloud Agent](./docs/DEPLOY_CLOUD_AGENT.md) | Deploy the AI Agent as a Google Cloud Agent Engine service |
 | [Workflow Diagrams](./docs/WORKFLOWS.md) | Detailed sequence diagrams: VibeMongo ↔ ADK ↔ MCP ↔ MongoDB |
+
+---
+
+## 🚀 Why VibeMongo? (Unique Advantages)
+
+While traditional tools like MongoDB Compass offer solid administration, **VibeMongo** rethinks the database management experience by integrating generative AI deeply into the workflow:
+
+1. **DB-Guardian Copilot (AI-Driven SRE)**
+   - VibeMongo doesn't just show you data; it actively monitors query performance.
+   - Using the **Arize Phoenix MCP**, the built-in AI agent detects slow queries (`COLLSCAN`), explains execution plans, and automatically suggests and applies index optimizations to turn them into efficient `IXSCAN` operations.
+2. **Context-Aware AI Chat Sidebar**
+   - Forget writing complex aggregation pipelines manually. Just ask the agent: *"Show me the top 5 products by revenue grouped by category in a pie chart."* 
+   - The agent securely translates natural language to MongoDB aggregations and instantly visualizes the result using ECharts—right in your browser.
+3. **One-Click Index Optimization**
+   - Every collection view features an "**Optimize Index**" magic button that instantly triggers the AI to evaluate your current schema, query usage, and indexes to suggest performance enhancements.
+4. **"Vibe" Aesthetics (Minimalist & Modern)**
+   - Built on Vue 3 and Vite, it drops the clunky Java-like interfaces of legacy tools in favor of a sleek, glassmorphic, responsive, dark-mode native dashboard. 
+5. **Full-Stack Feature Parity**
+   - Supports Document CRUD, dynamic BSON parsing, complex schema analysis, mass deletion, multi-database connection management, and comprehensive zip-based Backup & Restore workflows.
 
 ---
 

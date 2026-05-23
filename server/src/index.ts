@@ -1,3 +1,4 @@
+// import 'module-alias/register';
 import { Router, Request, Response, NextFunction } from 'express';
 import express from "express";
 import path from "path";
@@ -11,15 +12,16 @@ import { connectionStore } from './services/ConnectionStore';
 
 var apiRoute = require('./routes/api');
 
-var dir_base = __dirname;
+// var dir_base = __dirname;
 var app = express();
 
 // Removed locales loading
 
 // Setup DB for server stats using modern @seald-io/nedb fork
 var Datastore = require('@seald-io/nedb');
+const isProd = process.env.NODE_ENV === 'production';
 var dir_data = path.join(__dirname, '../data/');
-var dbStatsPath = path.join(dir_data, 'dbStats.db');
+var dbStatsPath = path.join(dir_data, isProd ? 'dbStats.db?nolock=1' : 'dbStats.db');
 
 // Check existence of data dir
 if (!fs.existsSync(dir_data)) fs.mkdirSync(dir_data);
@@ -29,27 +31,6 @@ var db = new Datastore({ filename: dbStatsPath, autoload: true });
 // Check existence of backups dir, create if nothing
 var dir_backups = path.join(__dirname, '../backups/');
 if (!fs.existsSync(dir_backups)) fs.mkdirSync(dir_backups);
-
-// Pre-populate default connection from environment variables into SQLite ConnectionStore if defined
-// if (process.env.CONN_NAME && process.env.DB_HOST) {
-//     if (!process.env.DB_PORT) process.env.DB_PORT = '27017';
-//     var connectionString = 'mongodb://';
-//     if (process.env.DB_USERNAME && process.env.DB_PASSWORD && process.env.DB_NAME) {
-//         connectionString += process.env.DB_USERNAME + ':' + process.env.DB_PASSWORD + '@' + process.env.DB_HOST + ':' + process.env.DB_PORT + '/' + process.env.DB_NAME;
-//     } else if (process.env.DB_USERNAME && process.env.DB_PASSWORD) {
-//         connectionString += process.env.DB_USERNAME + ':' + process.env.DB_PASSWORD + '@' + process.env.DB_HOST + ':' + process.env.DB_PORT + '/';
-//     } else {
-//         connectionString += process.env.DB_HOST + ':' + process.env.DB_PORT;
-//     }
-
-//     connectionStore.getConnection(process.env.CONN_NAME).then((existing) => {
-//         if (!existing) {
-//             connectionStore.saveConnection(process.env.CONN_NAME!, connectionString).catch(err => {
-//                 console.error('Error auto-saving connection:', err);
-//             });
-//         }
-//     });
-// }
 
 // setup nconf files
 nconf.add('app', {
@@ -78,7 +59,7 @@ app.locals.app_host = app_host;
 app.locals.app_port = app_port;
 
 var app_context = '';
-if (nconf.stores.app.get('app:context') !== undefined) {
+if (nconf.stores.app.get('app:context') !== undefined && nconf.stores.app.get('app:context') !== '') {
     app_context = '/' + nconf.stores.app.get('app:context');
 }
 

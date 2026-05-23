@@ -5,10 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.encrypt = encrypt;
 exports.decrypt = decrypt;
-const path_1 = __importDefault(require("path"));
 const crypto_1 = __importDefault(require("crypto"));
-const dotenv_1 = __importDefault(require("dotenv"));
-dotenv_1.default.config({ path: path_1.default.join(__dirname, '../../../.env') }); // Load root .env if needed
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16; // AES block size
 // Ensure key is 32 characters

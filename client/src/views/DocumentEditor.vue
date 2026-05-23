@@ -12,8 +12,8 @@
         </p>
       </div>
       <div class="header-action-group">
-        <el-button @click="goBack">{{ store.t('Cancel') }}</el-button>
-        <el-button type="primary" :icon="DocumentChecked" @click="handleSave" :loading="saving">
+        <el-button @click="goBack" round>{{ store.t('Cancel') }}</el-button>
+        <el-button type="primary" round :icon="DocumentChecked" @click="handleSave" :loading="saving">
           {{ store.t('Save Document') }}
         </el-button>
       </div>

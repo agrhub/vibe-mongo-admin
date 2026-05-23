@@ -50,23 +50,41 @@
               <el-button 
                 v-if="store.activeConnection && $route.name !== 'Monitoring'"
                 type="primary" 
-                link
+                text bg round size="small"
                 :icon="DataLine"
                 @click="$router.push(`/${store.activeConnection}/monitoring`)"
               >
                 {{ store.t('Metrics') }}
               </el-button>
+              <el-button 
+                v-if="store.activeConnection && $route.name === 'Monitoring'"
+                type="primary" 
+                text bg round size="small"
+                :icon="Collection"
+                @click="$router.go(-1)"
+              >
+                {{ store.t('Data') }}
+              </el-button>
 
               <!-- Theme selector dropdown -->
               <el-dropdown trigger="click" @command="handleThemeChange" size="small" class="header-theme-dropdown">
-                <span class="locale-trigger-btn">
+                <!-- <span class="locale-trigger-btn">
                   <el-icon>
                     <Sunny v-if="store.theme === 'light'" />
                     <Moon v-else-if="store.theme === 'dark'" />
                     <Monitor v-else />
                   </el-icon>
                   {{ store.t(themeLabel) }}
-                </span>
+                </span> -->
+                <el-button
+                  text bg round size="small">
+                  <el-icon>
+                    <Sunny v-if="store.theme === 'light'" />
+                    <Moon v-else-if="store.theme === 'dark'" />
+                    <Monitor v-else />
+                  </el-icon>
+                  {{ store.t(themeLabel) }}
+                </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="light" :class="{ 'is-active': store.theme === 'light' }">
@@ -84,10 +102,15 @@
 
               <!-- Language selector dropdown -->
               <el-dropdown trigger="click" @command="handleLocaleChange" size="small" class="header-locale-dropdown">
-                <span class="locale-trigger-btn">
+                <!-- <span class="locale-trigger-btn">
                   <el-icon><Location /></el-icon>
                   {{ store.activeLocale.toUpperCase() }}
-                </span>
+                </span> -->
+                <el-button
+                  text bg round size="small">
+                  <el-icon><Location /></el-icon>
+                  {{ store.activeLocale.toUpperCase() }}
+                </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item 
@@ -103,15 +126,15 @@
               </el-dropdown>
 
               <!-- Connection details indicator -->
-              <el-tag v-if="store.activeConnection" type="success" size="small" effect="plain" class="connection-badge">
+              <!-- <el-tag v-if="store.activeConnection" type="success" size="small" effect="plain" class="connection-badge">
                 {{ store.t('Connected') }}
-              </el-tag>
+              </el-tag> -->
 
               <!-- Logout button -->
               <el-button 
                 v-if="store.passwordRequired" 
                 type="danger" 
-                plain
+                text bg round
                 size="small"
                 :icon="SwitchButton" 
                 @click="handleLogout"
@@ -144,7 +167,7 @@ import { useRouter } from 'vue-router';
 import { store } from './stores';
 import Sidebar from './components/Sidebar.vue';
 import AgentChatSidebar from './components/chat/AgentChatSidebar.vue';
-import { HomeFilled, ArrowRight, DataLine, SwitchButton, Location, Sunny, Moon, Monitor } from '@element-plus/icons-vue';
+import { HomeFilled, ArrowRight, DataLine, SwitchButton, Location, Sunny, Moon, Monitor, Collection } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 const themeLabel = computed(() => {

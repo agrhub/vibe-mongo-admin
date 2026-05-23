@@ -28,10 +28,22 @@ export const useAppStore = defineStore('app', {
     collectionsList: [],
     usersList: [],
     backupsList: [],
-    serverInfo: null
+    serverInfo: null,
+
+    // Chat Agent State
+    chatSidebarOpen: false,
+    chatInput: '',
+    chartTypeHint: '', // e.g. 'pie', 'bar', 'line' — set by Analysis "Run" button
+    autoSendNextCommand: false
   }),
 
   actions: {
+    openChatWithCommand(command, chartType, autoSend = false) {
+      this.chatSidebarOpen = true;
+      this.chatInput = command;
+      this.chartTypeHint = chartType || '';
+      this.autoSendNextCommand = autoSend;
+    },
     // Translation helper proxy to vue-i18n
     t(key) {
       if (!key) return '';

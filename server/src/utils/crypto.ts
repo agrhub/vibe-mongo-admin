@@ -1,8 +1,4 @@
-import path from 'path';
 import crypto from 'crypto';
-import dotenv from 'dotenv';
-dotenv.config({ path: path.join(__dirname, '../../../.env') }); // Load root .env if needed
-
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16; // AES block size
 

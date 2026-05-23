@@ -3,14 +3,19 @@
     <el-card class="indexes-card">
       <template #header>
         <div class="card-header">
-          <span>{{ store.t('Collection Indexes') }}</span>
-          <el-button type="primary" :icon="Plus" size="small" @click="openCreateDialog">
-            {{ store.t('New Index') }}
-          </el-button>
+          <span>{{ collectionName ?? activeCollectionName }}</span>
+          <div class="header-actions">
+            <el-button type="success" round plain :icon="MagicStick" size="small" @click="optimizeIndexes">
+              {{ store.t('Optimize Index') }}
+            </el-button>
+            <el-button type="primary" round text bg :icon="Plus" size="small" @click="openCreateDialog">
+              {{ store.t('New Index') }}
+            </el-button>
+          </div>
         </div>
       </template>
 
-      <el-table :data="indexesList" style="width: 100%" size="large" :empty-text="store.t('No Data')">
+      <el-table :data="indexesList" style="width: 100%" size="small" :empty-text="store.t('No Data')">
         <el-table-column prop="name" :label="store.t('Index Name')">
           <template #default="scope">
             <strong>{{ scope.row.name }}</strong>
@@ -48,11 +53,11 @@
           </template>
         </el-table-column>
 
-        <el-table-column :label="store.t('Action')" align="right" width="160">
+        <el-table-column :label="store.t('Action')" fixed="right" width="160">
           <template #default="scope">
             <el-button
               type="primary"
-              link
+              link size="small"
               :icon="Edit"
               @click="openEditDialog(scope.row)"
               :disabled="scope.row.name === '_id_'"
@@ -61,7 +66,7 @@
             </el-button>
             <el-button
               type="danger"
-              link
+              link size="small"
               :icon="Delete"
               @click="handleDropIndex(scope.row.name)"
               :disabled="scope.row.name === '_id_'"
@@ -134,8 +139,9 @@
 
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="showDialog = false">{{ store.t('Cancel') }}</el-button>
-          <el-button
+          <el-button round text bg @click="showDialog = false">{{ store.t('Cancel') }}</el-button>
+          <el-button 
+            round text bg
             :type="isEditMode ? 'warning' : 'primary'"
             @click="isEditMode ? updateIndex() : createIndex()"
             :loading="saving"
@@ -148,14 +154,15 @@
   </div>
 </template>
 
-<script setup>
-import { ref, reactive, watch } from 'vue';
+<script setup lang="ts">
+import { ref, reactive, watch, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { store } from '../../stores';
-import { Plus, Delete, Edit } from '@element-plus/icons-vue';
+import { Plus, Delete, Edit, MagicStick } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import axios from 'axios';
 
+const props = defineProps<{ collectionName?: string }>();
 const route = useRoute();
 const loading = ref(false);
 
@@ -167,13 +174,16 @@ const editingIndexName = ref('');
 
 const indexForm = reactive({ keys: '', unique: false, sparse: false });
 
-watch(() => [route.params.conn, route.params.db, route.params.coll], () => {
+const activeCollectionName = computed(() => props.collectionName || store.activeColl);
+
+watch(() => [route.params.conn, route.params.db, activeCollectionName.value], () => {
   loadIndexes();
 }, { immediate: true });
 
 // ── Load ──────────────────────────────────────────────────────────
 async function loadIndexes() {
-  const { conn, db, coll } = route.params;
+  const { conn, db } = route.params;
+  const coll = activeCollectionName.value;
   if (!conn || !db || !coll) return;
 
   loading.value = true;
@@ -188,12 +198,18 @@ async function loadIndexes() {
 }
 
 // ── Open dialogs ──────────────────────────────────────────────────
+const optimizeIndexes = () => {
+  const coll = activeCollectionName.value;
+  const prompt = `Please analyze the indexes for the collection \`${coll}\`. Suggest how to optimize them to improve query performance, and show a comparison of before and after if possible.`;
+  store.openChatWithCommand(prompt, null, true);
+};
+
 const openCreateDialog = () => {
   isEditMode.value = false;
   showDialog.value = true;
 };
 
-const openEditDialog = (row) => {
+const openEditDialog = (row: any) => {
   isEditMode.value      = true;
   editingIndexName.value = row.name;
   // Populate form with existing index data
@@ -227,7 +243,7 @@ const createIndex = async () => {
     ElMessage.success(store.t('Index successfully created'));
     showDialog.value = false;
     loadIndexes();
-  } catch (e) {
+  } catch (e: any) {
     const msg = e.response?.data?.msg || store.t('Error creating index');
     ElMessage.error(msg);
   } finally {
@@ -254,7 +270,7 @@ const updateIndex = async () => {
     ElMessage.success(store.t('Index successfully updated (dropped & recreated)'));
     showDialog.value = false;
     loadIndexes();
-  } catch (e) {
+  } catch (e: any) {
     const msg = e.response?.data?.msg || store.t('Error updating index');
     ElMessage.error(msg);
   } finally {
@@ -263,7 +279,7 @@ const updateIndex = async () => {
 };
 
 // ── Drop ──────────────────────────────────────────────────────────
-const handleDropIndex = (indexName) => {
+const handleDropIndex = (indexName: string) => {
   ElMessageBox.confirm(
     `${store.t('Drop index')} "${indexName}"?`,
     store.t('Warning'),
@@ -290,7 +306,9 @@ const handleDropIndex = (indexName) => {
 </script>
 
 <style scoped>
-.indexes-card { border-radius: var(--radius-sm) !important; }
+/* .indexes-card { 
+  background-color: transparent !important;
+} */
 
 .card-header {
   display: flex;

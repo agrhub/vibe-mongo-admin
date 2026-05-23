@@ -1,9 +1,16 @@
-import { chatWithAgent, clearAgentSession } from '../agent/agent';
+import { chatWithAgent, clearAgentSession } from '@/agent/agent';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  chartVisual?: any;
+  navigation?: any;
+  suggestions?: string[];
+  databases?: string[];
+  collectionsInfo?: any;
+  documentsResult?: any;
+  mongoQuery?: string;
 }
 
 export class AgentChatService {
@@ -16,6 +23,7 @@ export class AgentChatService {
       currentDb?: string;
       currentCollection?: string;
       currentRoute?: string;
+      chartTypeHint?: string;
     }
   ): Promise<{
     message: string;
@@ -24,6 +32,8 @@ export class AgentChatService {
     suggestions?: string[];
     databases?: string[];
     collectionsInfo?: { db: string; collections: string[] };
+    documentsResult?: { query: string; documents: any[] };
+    mongoQuery?: string;
   }> {
     try {
       console.log(`[AgentChatService] Received chat request from user: ${userId}. Message: "${message}"`);
@@ -39,12 +49,33 @@ export class AgentChatService {
       });
 
       // Invoke the imported chatWithAgent function from the sibling agent workspace
-      const { message: responseMessage, chartVisual, navigation, suggestions, databases, collectionsInfo } = await chatWithAgent(userId, message, context);
+      const { 
+        message: responseMessage, 
+        chartVisual, 
+        navigation, 
+        suggestions, 
+        databases, 
+        collectionsInfo, 
+        documentsResult,
+        mongoQuery
+      } = await chatWithAgent(userId, message, context);
 
-      // Store assistant message in history
+      // Force chart type if hint was passed from Analysis UI
+      if (context?.chartTypeHint && chartVisual) {
+        chartVisual.type = context.chartTypeHint;
+      }
+
+      // Store assistant message in history with full metadata
       this.historyMap.get(userId)!.push({
         role: 'assistant',
         content: responseMessage,
+        chartVisual,
+        navigation,
+        suggestions,
+        databases,
+        collectionsInfo,
+        documentsResult,
+        mongoQuery,
         timestamp: Date.now()
       });
 
@@ -56,12 +87,14 @@ export class AgentChatService {
         navigation: navigation,
         suggestions: suggestions,
         databases,
-        collectionsInfo
+        collectionsInfo,
+        documentsResult,
+        mongoQuery
       };
     } catch (err: any) {
       console.error('[AgentChatService] Error during chat session:', err);
       const errMsg = `An error occurred: ${err.message || 'Unknown agent execution error'}`;
-      
+
       // Store error message as assistant response so history stays aligned
       if (this.historyMap.has(userId)) {
         this.historyMap.get(userId)!.push({

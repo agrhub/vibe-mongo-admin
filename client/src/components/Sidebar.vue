@@ -2,8 +2,9 @@
   <div class="sidebar-container" :class="{ 'collapsed': isCollapsed }">
     <!-- Brand / Logo -->
     <div class="sidebar-brand">
-      <el-icon class="brand-icon"><Grid /></el-icon>
-      <span class="brand-text">VibeMongo</span>
+      <!-- <el-icon v-if="!isCollapsed" class="brand-icon"><Grid /></el-icon> -->
+      <el-image src="/favicon.ico" :size="32" style="width: 32px; height: 32px;" v-if="!isCollapsed" class="brand-logo" />
+      <span v-if="!isCollapsed" class="brand-text">VibeMongo</span>
       <div class="collapse-toggle" @click="isCollapsed = !isCollapsed">
         <el-icon><Fold v-if="!isCollapsed" /><Expand v-else /></el-icon>
       </div>
@@ -11,12 +12,17 @@
 
     <!-- Actions Bar (Language, Theme & Connections list link) -->
     <div class="sidebar-actions" v-if="!isCollapsed">
+      <!-- Connections Manager link -->
+      <el-button type="primary" round text size="" @click="$router.push('/')">
+        <el-icon><Connection /></el-icon>
+        {{ store.t('Connections') }}
+      </el-button>
       <!-- Language selector dropdown -->
-      <el-dropdown trigger="click" @command="handleLocaleChange" size="small">
-        <span class="action-btn">
+      <!-- <el-dropdown trigger="click" @command="handleLocaleChange" size="small">
+        <el-button round text bg size="">
           <el-icon><Location /></el-icon>
           {{ store.activeLocale.toUpperCase() }}
-        </span>
+        </el-button>
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item 
@@ -29,12 +35,7 @@
             </el-dropdown-item>
           </el-dropdown-menu>
         </template>
-      </el-dropdown>
-      <!-- Connections Manager link -->
-      <router-link to="/" class="action-btn-link">
-        <el-icon><Connection /></el-icon>
-        {{ store.t('Connections') }}
-      </router-link>
+      </el-dropdown> -->
     </div>
 
     <!-- Database Explorer Tree -->
@@ -227,12 +228,12 @@ const createDatabase = async () => {
 <style scoped>
 .sidebar-container {
   width: 260px;
-  background: #0f172a; /* Premium dark slate background */
-  color: #e2e8f0;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
   display: flex;
   flex-direction: column;
   height: 100vh;
-  border-right: 1px solid #1e293b;
+  border-right: 1px solid var(--border-color);
   transition: width var(--transition-normal);
   flex-shrink: 0;
 }
@@ -247,7 +248,7 @@ const createDatabase = async () => {
   display: flex;
   align-items: center;
   padding: 0 1rem;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid var(--border-color);
   position: relative;
   overflow: hidden;
 }
@@ -264,7 +265,7 @@ const createDatabase = async () => {
   font-weight: 700;
   letter-spacing: -0.02em;
   white-space: nowrap;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .collapse-toggle {
@@ -276,7 +277,7 @@ const createDatabase = async () => {
 }
 
 .collapse-toggle:hover {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 /* Actions bar styling */
@@ -284,8 +285,8 @@ const createDatabase = async () => {
   display: flex;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #1e293b;
-  background: #0b0f19;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-primary);
 }
 
 .action-btn {
@@ -300,7 +301,7 @@ const createDatabase = async () => {
 }
 
 .action-btn:hover {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .action-btn-link {
@@ -315,7 +316,7 @@ const createDatabase = async () => {
 }
 
 .action-btn-link:hover {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 /* Database Explorer tree */
@@ -363,8 +364,8 @@ const createDatabase = async () => {
 }
 
 .db-row:hover {
-  background: #1e293b;
-  color: #fff;
+  background: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .node-left {
@@ -424,18 +425,20 @@ const createDatabase = async () => {
 }
 
 .coll-row:hover {
-  background: #1e293b;
-  color: #fff;
+  background: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .db-node.is-active > .db-row {
-  background: #1e293b;
-  color: #fff;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .coll-row.is-active {
-  background: rgba(13, 148, 136, 0.15);
-  color: #fff;
+  background: var(--color-brand-light);
+  color: var(--color-brand);
+  font-weight: 600;
   border-left: 2px solid var(--color-brand);
 }
 
@@ -481,7 +484,7 @@ const createDatabase = async () => {
 }
 
 .collapsed-icon-btn:hover {
-  background: #1e293b;
-  color: #fff;
+  background: var(--bg-primary);
+  color: var(--text-primary);
 }
 </style>

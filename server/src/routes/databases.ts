@@ -1,8 +1,9 @@
 import { Router, Request as ExpressRequest, Response } from 'express';
 type Request = ExpressRequest<any>;
-import path from 'path';
-import fs from 'fs';
+// import path from 'path';
+// import fs from 'fs';
 import * as common from './common.js';
+import { geminiService } from '../services/GeminiService';
 import { BSON } from "mongodb";
 const ejson = BSON.EJSON;
 
@@ -273,177 +274,183 @@ router.post('/api/:conn/db/rename', async function (req: Request, res: Response)
     }
 });
 
-// Backup a database
-router.post('/api/:conn/:db/backup', async function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+// =============== AI-POWERED ANALYSIS ===============
 
-    if (!connection_list || !connection_list[req.params.conn]) {
-        return res.status(400).json({ 'msg': 'Invalid connection' });
+const AI_DATABASE_ANALYSIS_PROMPT = `You are an expert MongoDB data architect and analyst.
+Given a list of collections in a database and their schemas/sample documents, generate exactly 8 database-level analytical charts.
+
+At least 4 of the charts SHOULD aggregate data from 2 or more collections using MongoDB $lookup (join) IF the database has multiple collections.
+If there is only one collection, focus on various distributions, filters, and trends within that single collection.
+
+For each chart, provide a MongoDB aggregation pipeline running on the base collection.
+
+STRICT RULES:
+- EVERY pipeline MUST end with a $project stage that outputs EXACTLY at least two fields: one for the label and one for the value.
+- Rename grouping identifiers from "_id" to a meaningful field name based on your schema analysis (e.g., "Category", "User", "Origin").
+- MUST specify "labelField" as the string field from your final projection that best represents the data points.
+- ALWAYS ignore "_id" as a label field in visualizations.
+- Each pipeline MUST be a valid JSON array
+- Return ONLY a valid JSON array. No markdown. No explanation.
+- Use EXACTLY this structure:
+[
+  {
+    "title": "Short descriptive title",
+    "description": "One sentence describing what this chart reveals",
+    "collection": "base_collection_to_run_on",
+    "collections": ["base_collection", "other_joined_collection"],
+    "pipeline": [..., { "$project": { "_id": 0, "<labelField>": "...", "<valueField>": "..." } }, { "$limit": 20 }],
+    "chartType": "bar|pie|line",
+    "labelField": "<labelField>",
+    "valueField": "<valueField>"
+  }
+]`;
+
+router.post('/api/:conn/:db/ai-analysis', async function (req: Request, res: Response) {
+  const connection_list = req.app.locals.dbConnections;
+  if (!connection_list || !connection_list[req.params.conn]) {
+    return res.status(400).json({ msg: 'Invalid connection' });
+  }
+
+  const mongo_db = connection_list[req.params.conn].client.db(req.params.db);
+  const dbName = req.params.db;
+  const customPrompt = req.body.customPrompt || '';
+
+  try {
+    const collections = await mongo_db.listCollections().toArray();
+    const cleanColls = common.cleanCollections(collections);
+    
+    if (cleanColls.length === 0) {
+      return res.json({ insights: 'Database is empty.', charts: [] });
     }
 
-    var db_name = req.params.db;
-    var conn = connection_list[req.params.conn];
+    // Prepare overview of all collections
+    const overview: any[] = [];
+    for (const coll of cleanColls.slice(0, 8)) { // Limit to 8 collections for prompt size
+      const count = await mongo_db.collection(coll).countDocuments();
+      const sample = await mongo_db.collection(coll).find().limit(2).toArray();
+      overview.push({
+        name: coll,
+        docCount: count,
+        sampleDoc: sample[0] || {}
+      });
+    }
 
+    const userPrompt = `Database: "${dbName}"
+Collections Overview:
+${JSON.stringify(overview, null, 2)}
+
+${customPrompt ? `USER'S SPECIFIC ANALYSIS REQUEST: ${customPrompt}\n` : ''}
+Generate 8 database-wide analytical charts. ${overview.length > 1 ? 'At least 4 MUST use $lookup to join 2+ collections.' : 'Since there is only one collection, focus on various single-collection insights.'}`;
+
+    let chartSpecs: any[] = [];
     try {
-        var mongo_db = conn.client.db(db_name);
-        var collections = await mongo_db.listCollections().toArray();
+      chartSpecs = await geminiService.generateJSON<any[]>(userPrompt, AI_DATABASE_ANALYSIS_PROMPT);
+    } catch (parseErr) {
+      return res.json({ insights: 'Failed to generate AI analysis.', charts: [] });
+    }
 
-        var keepObjectId = req.body.keepObjectId !== false;
+    const charts: any[] = [];
+    const seriesColors = ['#409eff', '#67c23a', '#e6a23c', '#f56c6c', '#9b59b6'];
 
-        var AdmZip = require('adm-zip');
-        var zip = new AdmZip();
+    for (const spec of chartSpecs) {
+      try {
+        const collName = spec.collection;
+        if (!cleanColls.includes(collName)) continue;
 
-        // Read all collections
-        for (var col of collections) {
-            if (col.type === 'view') continue; // Skip views
+        // Enforce a limit to avoid runaway aggregations
+        const pipeline = spec.pipeline || [];
+        const hasLimit = pipeline.some((s: any) => s['$limit'] !== undefined);
+        const safePipeline = hasLimit ? pipeline : [...pipeline, { $limit: 20 }];
 
-            var docs = await mongo_db.collection(col.name).find({}).toArray();
+        const results = await mongo_db.collection(collName).aggregate(safePipeline).toArray();
+        if (!results || results.length === 0) continue;
 
-            if (!keepObjectId) {
-                docs = docs.map(function (doc: any) {
-                    if (doc._id) {
-                        delete doc._id;
-                    }
-                    return doc;
-                });
-            }
+        const keys = Object.keys(results[0]).filter(k => k !== '_id');
+        if (keys.length === 0) continue;
 
-            var serialized = ejson.stringify(docs, undefined, 2);
-            zip.addFile(col.name + '.json', Buffer.from(serialized, 'utf8'));
+        // Prefer AI-specified fields first, then smart heuristics
+        const aiLabel = spec.labelField && keys.includes(spec.labelField) ? spec.labelField : null;
+        const aiValue = spec.valueField && keys.includes(spec.valueField) ? spec.valueField : null;
+
+        // Heuristic fallback: prefer any available string/boolean field over _id
+        const stringKeys = keys.filter(k => typeof results[0][k] === 'string' || typeof results[0][k] === 'boolean');
+        const numericKeys = keys.filter(k => typeof results[0][k] === 'number');
+
+        const labelKey: string = aiLabel
+          || stringKeys[0]
+          || keys[0];
+
+        const valueKey: string = aiValue
+          || numericKeys.find(k => k !== labelKey)
+          || numericKeys[0]
+          || keys.find(k => k !== labelKey)
+          || keys[1]
+          || keys[0];
+
+        // Safety: don't let both axes show the same field
+        if (labelKey === valueKey) {
+          continue;
         }
 
-        // Add metadata
-        var metadata = {
-            database: db_name,
-            backupDate: new Date().toISOString(),
-            keepObjectId: keepObjectId,
-            collections: collections.filter((c: any) => c.type !== 'view').map((c: any) => c.name)
+        let option: any = {
+          title: { text: spec.title, left: 'center', textStyle: { color: '#ccc', fontSize: 13 } },
+          tooltip: { trigger: spec.chartType === 'pie' ? 'item' : 'axis' },
+          backgroundColor: 'transparent',
+          grid: { left: '3%', right: '4%', bottom: '8%', containLabel: true }
         };
-        zip.addFile('metadata.json', Buffer.from(JSON.stringify(metadata, null, 2), 'utf8'));
 
-        var backupPath = path.join(__dirname, '../../../backups');
-        if (!fs.existsSync(backupPath)) {
-            fs.mkdirSync(backupPath);
-        }
-
-        var zipFileName = db_name + '_backup_' + Date.now() + '.zip';
-        var zipFilePath = path.join(backupPath, zipFileName);
-
-        zip.writeZip(zipFilePath);
-
-        res.status(200).json({ 'msg': 'Database successfully backed up' + ': ' + zipFileName });
-    } catch (err: any) {
-        console.error('Backup DB error: ', err);
-        res.status(400).json({ 'msg': 'Unable to backup database' + ': ' + err.message });
-    }
-});
-
-// Restore a database
-router.post('/api/:conn/:db/restore', async function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
-
-    if (!connection_list || !connection_list[req.params.conn]) {
-        return res.status(400).json({ 'msg': 'Invalid connection' });
-    }
-
-    var db_name = req.params.db;
-    var conn = connection_list[req.params.conn];
-
-    var backupFile = req.body.backupFile;
-    var restoreMode = req.body.restoreMode || 'replace'; // replace, upsert, insert
-
-    if (!backupFile) {
-        return res.status(400).json({ 'msg': 'Backup file parameter (backupFile) is required' });
-    }
-
-    var backupPath = path.join(__dirname, '../../../backups', backupFile);
-    if (!fs.existsSync(backupPath)) {
-        // If not found in root backups directory, check under db_name directory
-        var altPath = path.join(__dirname, '../../../backups', db_name, backupFile);
-        if (fs.existsSync(altPath)) {
-            backupPath = altPath;
+        if (spec.chartType === 'pie') {
+          option.series = [{
+            type: 'pie',
+            radius: ['40%', '70%'],
+            data: results.slice(0, 10).map((r: any, i: number) => ({
+              name: String(r[labelKey] ?? 'unknown'),
+              value: r[valueKey],
+              itemStyle: { color: seriesColors[i % seriesColors.length] }
+            })),
+            label: { color: '#bbb' }
+          }];
         } else {
-            return res.status(400).json({ 'msg': 'Backup file/folder not found: ' + backupFile });
+          option.xAxis = {
+            type: 'category',
+            data: results.slice(0, 15).map((r: any) => String(r[labelKey] ?? '').slice(0, 20)),
+            axisLabel: { color: '#999', rotate: results.length > 7 ? 25 : 0 },
+            axisLine: { lineStyle: { color: '#444' } }
+          };
+          option.yAxis = { type: 'value', axisLabel: { color: '#999' }, splitLine: { lineStyle: { color: '#333' } } };
+          option.series = [{
+            type: spec.chartType || 'bar',
+            data: results.slice(0, 15).map((r: any) => r[valueKey]),
+            itemStyle: { color: seriesColors[0], borderRadius: [4, 4, 0, 0] }
+          }];
         }
+
+        // Determine all collections involved (single or multi-collection join)
+        const involvedCollections: string[] = Array.isArray(spec.collections) && spec.collections.length > 0
+          ? spec.collections
+          : [collName];
+
+        charts.push({
+          title: spec.title,
+          description: spec.description,
+          chartType: spec.chartType,
+          option,
+          pipeline: safePipeline,
+          collection: collName,
+          collections: involvedCollections
+        });
+      } catch (e) {
+        // Skip failures
+      }
     }
 
-    try {
-        var mongo_db = conn.client.db(db_name);
-        var collectionsData: any = {}; // collName -> Array of docs
-
-        var isZip = backupPath.endsWith('.zip');
-        if (isZip) {
-            var AdmZip = require('adm-zip');
-            var zip = new AdmZip(backupPath);
-            var zipEntries = zip.getEntries();
-
-            zipEntries.forEach(function (entry: any) {
-                if (entry.entryName.endsWith('.json') && entry.entryName !== 'metadata.json') {
-                    var collName = entry.entryName.replace('.json', '');
-                    var fileContent = entry.getData().toString('utf8');
-                    try {
-                        collectionsData[collName] = ejson.parse(fileContent);
-                    } catch (e) {
-                        console.error('Error parsing collection ' + collName + ' from zip: ', e);
-                    }
-                }
-            });
-        } else {
-            // Backward compatibility for standard directory backups
-            var files = fs.readdirSync(backupPath);
-            files.forEach(function (file) {
-                if (file.endsWith('.json') && file !== 'metadata.json') {
-                    var collName = file.replace('.json', '');
-                    var fileContent = fs.readFileSync(path.join(backupPath, file), 'utf8');
-                    try {
-                        collectionsData[collName] = ejson.parse(fileContent);
-                    } catch (e) {
-                        console.error('Error parsing collection ' + collName + ' from folder: ', e);
-                    }
-                }
-            });
-        }
-
-        // Perform restore operations
-        for (var collName in collectionsData) {
-            var docs = collectionsData[collName];
-            if (!Array.isArray(docs)) continue;
-
-            var collection = mongo_db.collection(collName);
-
-            if (restoreMode === 'replace') {
-                // Drop collection if exists (or simply delete all documents)
-                await collection.deleteMany({}).catch(() => { });
-                if (docs.length > 0) {
-                    await collection.insertMany(docs);
-                }
-            } else if (restoreMode === 'upsert') {
-                // Upsert by _id (if _id is present), otherwise insert
-                for (var doc of docs) {
-                    if (doc._id) {
-                        await collection.replaceOne({ _id: doc._id }, doc, { upsert: true });
-                    } else {
-                        await collection.insertOne(doc);
-                    }
-                }
-            } else if (restoreMode === 'insert') {
-                // Insert only, skipping existing ObjectIds
-                if (docs.length > 0) {
-                    await collection.insertMany(docs, { ordered: false }).catch(function (bulkErr: any) {
-                        // Ignore duplicate key errors silently, throw other write errors
-                        if (bulkErr.name !== 'MongoBulkWriteError' && bulkErr.code !== 11000) {
-                            throw bulkErr;
-                        }
-                    });
-                }
-            }
-        }
-
-        res.status(200).json({ 'msg': 'Database successfully restored' });
-    } catch (err: any) {
-        console.error('Restore DB error: ', err);
-        res.status(400).json({ 'msg': 'Unable to restore database' + ': ' + err.message });
-    }
+    res.json({
+      insights: `Database analysis complete for **${dbName}**. Generated ${charts.length} cross-collection visualizations.`,
+      charts
+    });
+  } catch (err: any) {
+    res.status(500).json({ msg: err.message });
+  }
 });
 
 export default router;

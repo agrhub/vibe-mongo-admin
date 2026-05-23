@@ -42,6 +42,8 @@ export async function chatWithAgent(
   suggestions?: string[];
   databases?: string[];
   collectionsInfo?: { db: string; collections: string[] };
+  documentsResult?: { query: string; documents: any[] };
+  mongoQuery?: string;
 }> {
   const stateDelta = context ? { uiContext: context } : undefined;
 
@@ -78,6 +80,7 @@ export async function chatWithAgent(
   let responseMessage = '';
   let chartVisual: any = null;
   let navigation: any = null;
+  let documentsResult: { query: string; documents: any[] } | undefined;
 
   for await (const event of eventGenerator) {
     const textParts = event.content?.parts?.map((p: any) => p.text).filter(Boolean) || [];
@@ -165,13 +168,37 @@ export async function chatWithAgent(
     responseMessage = responseMessage.replace(chartRegex, '').trim();
   }
 
+  // Extract documentsResult from [DOCUMENTS]...[/DOCUMENTS] block
+  const docsRegex = /\[DOCUMENTS\]([\s\S]*?)\[\/DOCUMENTS\]/;
+  const docsMatch = responseMessage.match(docsRegex);
+  if (docsMatch) {
+    try {
+      const cleanJson = docsMatch[1].replace(/```json/g, '').replace(/```/g, '').trim();
+      documentsResult = JSON.parse(cleanJson);
+    } catch (e) {
+      console.error('[Agent] Failed to parse documents block:', e);
+    }
+    responseMessage = responseMessage.replace(docsRegex, '').trim();
+  }
+
+  // Extract standalone mongoQuery from [QUERY]...[/QUERY] block
+  let mongoQuery: string | undefined;
+  const queryRegex = /\[QUERY\]([\s\S]*?)\[\/QUERY\]/;
+  const queryMatch = responseMessage.match(queryRegex);
+  if (queryMatch) {
+    mongoQuery = queryMatch[1].replace(/```javascript/g, '').replace(/```json/g, '').replace(/```/g, '').trim();
+    responseMessage = responseMessage.replace(queryRegex, '').trim();
+  }
+
   return {
     message: responseMessage,
     chartVisual: chartVisual || undefined,
     navigation: navigation || undefined,
     suggestions: suggestions.length > 0 ? suggestions : undefined,
     databases,
-    collectionsInfo
+    collectionsInfo,
+    documentsResult,
+    mongoQuery
   };
 }
 

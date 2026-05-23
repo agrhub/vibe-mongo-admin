@@ -57,6 +57,7 @@ async function chatWithAgent(userId, message, context) {
     let responseMessage = '';
     let chartVisual = null;
     let navigation = null;
+    let documentsResult;
     for await (const event of eventGenerator) {
         const textParts = event.content?.parts?.map((p) => p.text).filter(Boolean) || [];
         if (textParts.length > 0) {
@@ -141,13 +142,36 @@ async function chatWithAgent(userId, message, context) {
         }
         responseMessage = responseMessage.replace(chartRegex, '').trim();
     }
+    // Extract documentsResult from [DOCUMENTS]...[/DOCUMENTS] block
+    const docsRegex = /\[DOCUMENTS\]([\s\S]*?)\[\/DOCUMENTS\]/;
+    const docsMatch = responseMessage.match(docsRegex);
+    if (docsMatch) {
+        try {
+            const cleanJson = docsMatch[1].replace(/```json/g, '').replace(/```/g, '').trim();
+            documentsResult = JSON.parse(cleanJson);
+        }
+        catch (e) {
+            console.error('[Agent] Failed to parse documents block:', e);
+        }
+        responseMessage = responseMessage.replace(docsRegex, '').trim();
+    }
+    // Extract standalone mongoQuery from [QUERY]...[/QUERY] block
+    let mongoQuery;
+    const queryRegex = /\[QUERY\]([\s\S]*?)\[\/QUERY\]/;
+    const queryMatch = responseMessage.match(queryRegex);
+    if (queryMatch) {
+        mongoQuery = queryMatch[1].replace(/```javascript/g, '').replace(/```json/g, '').replace(/```/g, '').trim();
+        responseMessage = responseMessage.replace(queryRegex, '').trim();
+    }
     return {
         message: responseMessage,
         chartVisual: chartVisual || undefined,
         navigation: navigation || undefined,
         suggestions: suggestions.length > 0 ? suggestions : undefined,
         databases,
-        collectionsInfo
+        collectionsInfo,
+        documentsResult,
+        mongoQuery
     };
 }
 async function clearAgentSession(userId) {

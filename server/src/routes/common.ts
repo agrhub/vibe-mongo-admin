@@ -382,26 +382,26 @@ exports.parseMongoUri = function (uri: string) {
     if (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://')) {
         throw new TypeError('uri must be mongodb scheme');
     }
-    
+
     // Extract everything after scheme
     const afterScheme = uri.substring(uri.indexOf('://') + 3);
-    
+
     // Find last '@' to isolate host list and path
     const atIndex = afterScheme.lastIndexOf('@');
     const hostAndPath = atIndex !== -1 ? afterScheme.substring(atIndex + 1) : afterScheme;
-    
+
     // Find first '/' to isolate path (database and options)
     const slashIndex = hostAndPath.indexOf('/');
     if (slashIndex === -1) {
         return { database: '' };
     }
-    
+
     const pathPart = hostAndPath.substring(slashIndex + 1);
-    
+
     // Find first '?' to isolate database name
     const qIndex = pathPart.indexOf('?');
     const database = qIndex !== -1 ? pathPart.substring(0, qIndex) : pathPart;
-    
+
     return { database: decodeURIComponent(database) };
 };
 

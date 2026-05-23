@@ -1,5 +1,5 @@
 var MongoClient = require('mongodb').MongoClient;
-var common = require('../routes/common');
+var common = require('@/routes/common');
 
 exports.addConnection = function (connection: any, app: any, callback: any) {
     if (!app.locals.dbConnections) {
@@ -14,13 +14,13 @@ exports.addConnection = function (connection: any, app: any, callback: any) {
     MongoClient.connect(connection.connString, connection.connOptions)
         .then(function (client: any) {
             // Add error listener to prevent uncaught exceptions on network errors
-            client.on('error', function(err: any) {
+            client.on('error', function (err: any) {
                 console.error('MongoDB Client Network Error:', err.message || err);
             });
-            client.on('serverHeartbeatFailed', function(event: any) {
+            client.on('serverHeartbeatFailed', function (event: any) {
                 console.error('MongoDB Server Heartbeat Failed');
             });
-            client.on('topologyClosed', function(event: any) {
+            client.on('topologyClosed', function (event: any) {
                 console.error('MongoDB Topology Closed');
             });
 

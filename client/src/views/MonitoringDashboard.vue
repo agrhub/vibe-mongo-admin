@@ -11,7 +11,7 @@
         </p>
       </div>
       <div class="header-action-group">
-        <el-button :icon="Refresh" @click="fetchMetrics" size="default">
+        <el-button :icon="Refresh" type="primary" round @click="fetchMetrics" size="">
           {{ store.t('Refresh') }}
         </el-button>
       </div>

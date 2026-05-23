@@ -9,7 +9,7 @@
       <el-button 
         type="primary" 
         :icon="Plus" 
-        size="large"
+        size="large" round
         @click="openAddDialog"
       >
         {{ store.t('New Connection') }}
@@ -38,7 +38,7 @@
           <el-icon class="empty-state-icon"><ConnectionIcon /></el-icon>
           <h3>{{ store.t('No Connections Configured') }}</h3>
           <p>{{ store.t('Create your first database connection profile to get started.') }}</p>
-          <el-button type="primary" :icon="Plus" @click="openAddDialog" size="large">
+          <el-button type="primary" round :icon="Plus" @click="openAddDialog" size="large">
             {{ store.t('Add Connection') }}
           </el-button>
         </div>

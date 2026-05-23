@@ -13,13 +13,14 @@ const async_1 = __importDefault(require("async"));
 const fs_1 = __importDefault(require("fs"));
 const ConnectionStore_1 = require("./services/ConnectionStore");
 var apiRoute = require('./routes/api');
-var dir_base = __dirname;
+// var dir_base = __dirname;
 var app = (0, express_1.default)();
 // Removed locales loading
 // Setup DB for server stats using modern @seald-io/nedb fork
 var Datastore = require('@seald-io/nedb');
+const isProd = process.env.NODE_ENV === 'production';
 var dir_data = path_1.default.join(__dirname, '../data/');
-var dbStatsPath = path_1.default.join(dir_data, 'dbStats.db');
+var dbStatsPath = path_1.default.join(dir_data, isProd ? 'dbStats.db?nolock=1' : 'dbStats.db');
 // Check existence of data dir
 if (!fs_1.default.existsSync(dir_data))
     fs_1.default.mkdirSync(dir_data);
@@ -28,25 +29,6 @@ var db = new Datastore({ filename: dbStatsPath, autoload: true });
 var dir_backups = path_1.default.join(__dirname, '../backups/');
 if (!fs_1.default.existsSync(dir_backups))
     fs_1.default.mkdirSync(dir_backups);
-// Pre-populate default connection from environment variables into SQLite ConnectionStore if defined
-// if (process.env.CONN_NAME && process.env.DB_HOST) {
-//     if (!process.env.DB_PORT) process.env.DB_PORT = '27017';
-//     var connectionString = 'mongodb://';
-//     if (process.env.DB_USERNAME && process.env.DB_PASSWORD && process.env.DB_NAME) {
-//         connectionString += process.env.DB_USERNAME + ':' + process.env.DB_PASSWORD + '@' + process.env.DB_HOST + ':' + process.env.DB_PORT + '/' + process.env.DB_NAME;
-//     } else if (process.env.DB_USERNAME && process.env.DB_PASSWORD) {
-//         connectionString += process.env.DB_USERNAME + ':' + process.env.DB_PASSWORD + '@' + process.env.DB_HOST + ':' + process.env.DB_PORT + '/';
-//     } else {
-//         connectionString += process.env.DB_HOST + ':' + process.env.DB_PORT;
-//     }
-//     connectionStore.getConnection(process.env.CONN_NAME).then((existing) => {
-//         if (!existing) {
-//             connectionStore.saveConnection(process.env.CONN_NAME!, connectionString).catch(err => {
-//                 console.error('Error auto-saving connection:', err);
-//             });
-//         }
-//     });
-// }
 // setup nconf files
 nconf_1.default.add('app', {
     type: 'literal', store: {
@@ -70,7 +52,7 @@ if (nconf_1.default.stores.app.get('app:port') !== undefined) {
 app.locals.app_host = app_host;
 app.locals.app_port = app_port;
 var app_context = '';
-if (nconf_1.default.stores.app.get('app:context') !== undefined) {
+if (nconf_1.default.stores.app.get('app:context') !== undefined && nconf_1.default.stores.app.get('app:context') !== '') {
     app_context = '/' + nconf_1.default.stores.app.get('app:context');
 }
 app.use((0, morgan_1.default)('dev'));

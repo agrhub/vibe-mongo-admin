@@ -8,10 +8,16 @@ SET REPO_NAME=vibemongo-repo
 SET IMAGE_NAME=vibemongo
 SET BUCKET_NAME=vibemongo-data-bucket
 
+REM --- Azize Phoenix OTEL Environment Variables ---
+SET PHOENIX_PROJECT_NAME=your_phoenix_project_name
+SET PHOENIX_API_KEY=your_phoenix_api_key
+SET PHOENIX_COLLECTOR_ENDPOINT=https://app.phoenix.arize.com/s/your_phoenix_name_id
+
 REM --- Application Environment Variables ---
 SET APP_PASSWORD=admin
 SET APP_ENCRYPTION_KEY=your_encryption_key_32_characters_here!
 SET APP_AGENT_MODEL=gemini-3.1-flash-lite
+SET GOOGLE_API_KEY=your_google_cloud_agent_api_key
 
 echo Creating Artifact Registry repository if not exists...
 call gcloud artifacts repositories create %REPO_NAME% --repository-format=docker --location=%REGION% --project=%PROJECT_ID% 2>nul || echo Repository already exists, skipping.
@@ -32,7 +38,7 @@ call gcloud run deploy vibemongo-admin ^
   --max-instances=1 ^
   --add-volume=name=data-vol,type=cloud-storage,bucket=%BUCKET_NAME% ^
   --add-volume-mount=volume=data-vol,mount-path=/app/server/data ^
-  --set-env-vars="HOST=0.0.0.0,NODE_ENV=production,PASSWORD=%APP_PASSWORD%,ENCRYPTION_KEY=%APP_ENCRYPTION_KEY%,AGENT_MODEL=%APP_AGENT_MODEL%,GOOGLE_CLOUD_PROJECT=%PROJECT_ID%,GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=1"
+  --set-env-vars="HOST=0.0.0.0,NODE_ENV=production,PASSWORD=%APP_PASSWORD%,ENCRYPTION_KEY=%APP_ENCRYPTION_KEY%,AGENT_MODEL=%APP_AGENT_MODEL%,GOOGLE_CLOUD_PROJECT=%PROJECT_ID%,GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=1,GOOGLE_API_KEY=%GOOGLE_API_KEY%,PHOENIX_PROJECT_NAME=%PHOENIX_PROJECT_NAME%,PHOENIX_API_KEY=%PHOENIX_API_KEY%,PHOENIX_COLLECTOR_ENDPOINT=%PHOENIX_COLLECTOR_ENDPOINT%"
 
 echo Deployment complete!
 

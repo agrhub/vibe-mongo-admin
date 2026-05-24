@@ -3,6 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+require("./agent/tracing");
+const tracing_1 = require("./agent/tracing");
 const express_1 = __importDefault(require("express"));
 const path_1 = __importDefault(require("path"));
 const morgan_1 = __importDefault(require("morgan"));
@@ -90,6 +92,8 @@ app.use(function (req, res, next) {
     req.db = db;
     next();
 });
+// Trace all /api/ requests as OpenInference RETRIEVAL spans in Arize Phoenix
+app.use('/api', tracing_1.traceMongoApiMiddleware);
 // Mount JSON API routes
 if (app_context !== '') {
     app.use(app_context, apiRoute);
@@ -157,9 +161,11 @@ ConnectionStore_1.connectionStore.listConnections().then((savedConnections) => {
             console.log('VibeMongo Server listening on host: http://' + app_host + ':' + app_port + app_context);
             // Trigger monitoring polling
             monitoring.serverMonitoring(db, app.locals.dbConnections);
+            monitoring.phoenixMonitoring(db);
             // Repeat monitor query ticker every 30 seconds
             setInterval(function () {
                 monitoring.serverMonitoring(db, app.locals.dbConnections);
+                monitoring.phoenixMonitoring(db);
             }, 30000);
         }).on('error', function (err) {
             if (err.code === 'EADDRINUSE') {

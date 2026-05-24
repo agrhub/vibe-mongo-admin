@@ -31,21 +31,36 @@ class GeminiService {
      * @returns The text response from Gemini.
      */
     async generateContent(prompt, systemInstruction) {
-        try {
-            const response = await this.genAI.models.generateContent({
-                model: this.modelId,
-                contents: prompt,
-                config: {
-                    systemInstruction: systemInstruction,
-                    temperature: 0.3,
-                },
-            });
-            return response.text || '';
-        }
-        catch (error) {
-            console.error('[GeminiService] Error generating content:', error);
-            throw error;
-        }
+        const { withSpan, trace } = require('@arizeai/phoenix-otel');
+        return withSpan(async () => {
+            const span = trace.getActiveSpan();
+            if (span) {
+                span.setAttributes({
+                    'openinference.span.kind': 'LLM',
+                    'llm.model_name': this.modelId,
+                    'input.value': JSON.stringify({ prompt: prompt.slice(0, 2000), systemInstruction }),
+                });
+            }
+            try {
+                const response = await this.genAI.models.generateContent({
+                    model: this.modelId,
+                    contents: prompt,
+                    config: {
+                        systemInstruction: systemInstruction,
+                        temperature: 0.3,
+                    },
+                });
+                const text = response.text || '';
+                if (span) {
+                    span.setAttributes({ 'output.value': text.slice(0, 2000) });
+                }
+                return text;
+            }
+            catch (error) {
+                console.error('[GeminiService] Error generating content:', error);
+                throw error;
+            }
+        }, { name: `gemini/${this.modelId}`, kind: 'LLM' })();
     }
     /**
      * Generates JSON content and attempts to parse it.

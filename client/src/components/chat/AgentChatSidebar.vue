@@ -122,8 +122,8 @@
 
               <div v-if="msg.mongoQuery" class="doc-result-wrapper">
                 <div class="chart-query-inspector">
-                  <div class="inspector-header">
-                    <div class="header-left" @click="chartQueryExpanded[idx] = !chartQueryExpanded[idx]">
+                  <div class="inspector-header" @click="chartQueryExpanded[idx] = !chartQueryExpanded[idx]" style="cursor: pointer;">
+                    <div class="header-left">
                       <span class="icon">⌘</span>
                       <span class="label">{{ store.t('View MongoDB Query') }}</span>
                     </div>
@@ -139,17 +139,39 @@
                         size="small" 
                         icon="CaretRight" 
                         round text bg style="margin-left: 0px;"
-                        @click="handleRunProposedQuery(msg.mongoQuery)"
+                        @click.stop="handleRunProposedQuery(msg.mongoQuery)"
                       >
                         {{ store.t('Run') }}
                       </el-button>
-                      <span class="chevron" :class="{ 'is-open': chartQueryExpanded[idx] }" @click="chartQueryExpanded[idx] = !chartQueryExpanded[idx]">›</span>
+                      <span class="chevron" :class="{ 'is-open': chartQueryExpanded[idx] }">›</span>
                     </div>
                   </div>
                   <div v-if="chartQueryExpanded[idx]" class="inspector-body">
                     <pre><code>{{ msg.mongoQuery }}</code></pre>
                   </div>
                 </div>
+              </div>
+
+              <!-- Trace Result Banner -->
+              <div v-if="msg.traceResult" class="doc-result-wrapper">
+                <el-alert
+                  type="info"
+                  show-icon
+                  :closable="false"
+                  class="trace-alert-banner"
+                >
+                  <template #title>
+                    <strong>Phoenix Trace Analysis</strong>
+                  </template>
+                  <div style="margin-top: 5px;">
+                    <span style="font-family: monospace; font-size: 0.85em; background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px;">ID: {{ msg.traceResult.traceId }}</span>
+                  </div>
+                  <div style="margin-top: 10px;">
+                    <el-button size="small" type="primary" plain @click="$router.push(`/${store.activeConnection}/monitoring?traceId=${msg.traceResult.traceId}`)">
+                      View Trace Details in Monitoring
+                    </el-button>
+                  </div>
+                </el-alert>
               </div>
 
               <!-- Retry Action Box if message failed -->
@@ -199,7 +221,7 @@
               :class="{ 'is-active': idx === mentionActiveIndex }"
               @mousedown.prevent="selectMention(opt)"
             >
-              <span class="mention-icon">{{ opt.type === 'db' ? '📁' : '📄' }}</span>
+              <span class="mention-icon">{{ opt.type === 'db' ? '📁' : (opt.type === 'coll' ? '📄' : '🏷️') }}</span>
               <span class="mention-label">{{ opt.label }}</span>
               <span class="mention-detail">{{ opt.detail }}</span>
             </div>
@@ -233,7 +255,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, watch, onMounted, computed } from 'vue';
+import { ref, nextTick, watch, onMounted, computed, reactive } from 'vue';
 import { store } from '../../stores';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -273,25 +295,75 @@ const mentionQuery = ref('');
 const mentionStartIndex = ref(-1);
 const mentionActiveIndex = ref(0);
 
+const schemaFieldsCache = reactive<Record<string, Array<{ type: 'field'; label: string; value: string; detail: string }>>>({});
+
 // Tracks which chart queries are expanded in the message logs
 const chartQueryExpanded = ref<Record<number, boolean>>({});
 
 const mentionOptions = computed(() => {
   const query = mentionQuery.value.toLowerCase().trim();
-  const list: Array<{ type: 'db' | 'coll'; label: string; value: string; detail?: string }> = [];
+  const list: Array<{ type: 'db' | 'coll' | 'field'; label: string; value: string; detail?: string }> = [];
   
   if (!store.sidebarList) return list;
 
-  // 1. Add databases
-  const dbs = Object.keys(store.sidebarList);
-  for (const db of dbs) {
-    if (!query || db.toLowerCase().includes(query)) {
-      list.push({
-        type: 'db',
-        label: db,
-        value: `@${db}`,
-        detail: 'Database'
-      });
+  // Add fields if query has dots
+  if (query.includes('.')) {
+    const parts = query.split('.');
+    
+    // 1. collection.field (using activeDb)
+    if (parts.length === 2 && store.activeDb) {
+      const collName = parts[0];
+      const fieldQuery = parts[1];
+      const cacheKey = `${store.activeDb}.${collName}`.toLowerCase();
+      
+      if (schemaFieldsCache[cacheKey]) {
+        for (const field of schemaFieldsCache[cacheKey]) {
+          if (!fieldQuery || field.label.toLowerCase().includes(fieldQuery)) {
+            list.push({
+              type: 'field',
+              label: field.label,
+              value: `@${collName}.${field.label}`,
+              detail: `${field.detail} (in ${collName})`
+            });
+          }
+        }
+      }
+    }
+    
+    // 2. db.collection.field
+    if (parts.length === 3) {
+      const dbName = parts[0];
+      const collName = parts[1];
+      const fieldQuery = parts[2];
+      const cacheKey = `${dbName}.${collName}`.toLowerCase();
+      
+      if (schemaFieldsCache[cacheKey]) {
+        for (const field of schemaFieldsCache[cacheKey]) {
+          if (!fieldQuery || field.label.toLowerCase().includes(fieldQuery)) {
+            list.push({
+              type: 'field',
+              label: field.label,
+              value: `@${dbName}.${collName}.${field.label}`,
+              detail: `${field.detail} (in ${collName})`
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // 1. Add databases (if no dot)
+  if (!query.includes('.')) {
+    const dbs = Object.keys(store.sidebarList);
+    for (const db of dbs) {
+      if (!query || db.toLowerCase().includes(query)) {
+        list.push({
+          type: 'db',
+          label: db,
+          value: `@${db}`,
+          detail: 'Database'
+        });
+      }
     }
   }
   
@@ -301,10 +373,11 @@ const mentionOptions = computed(() => {
     for (const coll of collections) {
       const fullLabel = `${db}.${coll}`;
       if (!query || coll.toLowerCase().includes(query) || fullLabel.toLowerCase().includes(query)) {
+        // If they type db.coll, we should suggest the collection too, so value = db.coll
         list.push({
           type: 'coll',
           label: coll,
-          value: `@${coll}`,
+          value: query.includes('.') ? `@${db}.${coll}` : `@${coll}`,
           detail: db
         });
       }
@@ -331,6 +404,47 @@ const handleInput = (val: string) => {
         mentionStartIndex.value = lastAtIndex;
         mentionQuery.value = textAfterAt;
         mentionActiveIndex.value = 0;
+        
+        // Fetch schema fields if querying db.coll or coll.
+        if (textAfterAt.includes('.')) {
+          const parts = textAfterAt.split('.');
+          let dbToFetch = '';
+          let collToFetch = '';
+          
+          if (parts.length >= 2) {
+             const firstPart = parts[0];
+             const secondPart = parts[1];
+             if (store.sidebarList && (store.sidebarList as any)[firstPart] && (store.sidebarList as any)[firstPart].includes(secondPart)) {
+               dbToFetch = firstPart;
+               collToFetch = secondPart;
+             } else if (store.activeDb) {
+               dbToFetch = store.activeDb;
+               collToFetch = firstPart;
+             }
+          }
+          
+          if (dbToFetch && collToFetch) {
+            const cacheKey = `${dbToFetch}.${collToFetch}`.toLowerCase();
+            if (!schemaFieldsCache[cacheKey]) {
+              schemaFieldsCache[cacheKey] = []; // initialize to prevent duplicate fetches
+              axios.get(`/api/${store.activeConnection}/${dbToFetch}/${collToFetch}/schema`)
+                .then(res => {
+                  if (res.data && res.data.fields) {
+                    schemaFieldsCache[cacheKey] = res.data.fields.map((f: any) => ({
+                      type: 'field',
+                      label: f.field,
+                      value: `@${dbToFetch}.${collToFetch}.${f.field}`,
+                      detail: f.type
+                    }));
+                  }
+                })
+                .catch(err => {
+                   console.error('Error fetching schema for autocomplete:', err);
+                });
+            }
+          }
+        }
+        
         return;
       }
     }
@@ -367,7 +481,7 @@ const handleInputKeydown = (e: KeyboardEvent) => {
   }
 };
 
-const selectMention = (option: { type: 'db' | 'coll'; label: string; value: string; detail?: string }) => {
+const selectMention = (option: { type: 'db' | 'coll' | 'field'; label: string; value: string; detail?: string }) => {
   const text = inputMsg.value;
   const start = mentionStartIndex.value;
   
@@ -402,10 +516,17 @@ const handleBlur = () => {
 
 const renderMarkdown = (text: string) => {
   try {
-    // Strip special metadata blocks that are already rendered in dedicated widgets
+    // Strip special metadata blocks (both tagged and untagged variants)
     const clean = text
+      // With closing tags
       .replace(/\[QUERY\][\s\S]*?\[\/QUERY\]/gi, '')
       .replace(/\[NAVIGATION\][\s\S]*?\[\/NAVIGATION\]/gi, '')
+      // Without closing tags: [NAVIGATION] {...} inline (agent omits closing tag)
+      .replace(/\[NAVIGATION\]\s*\{[^}]*\}/gi, '')
+      .replace(/\[QUERY\]\s*\{[^}]*\}/gi, '')
+      // Also strip any remaining [NAVIGATION] or [QUERY] tokens without content
+      .replace(/\[NAVIGATION\]/gi, '')
+      .replace(/\[QUERY\]/gi, '')
       .trim();
     return marked.parse(clean, { async: false });
   } catch (e) {
@@ -423,6 +544,7 @@ interface LocalMessage {
   collectionsInfo?: { db: string; collections: string[] };
   documentsResult?: { query: string; documents: any[] };
   mongoQuery?: string;
+  traceResult?: { traceId: string; [key: string]: any };
   isError?: boolean;
 }
 
@@ -1597,5 +1719,14 @@ onMounted(() => {
     word-break: break-all;
     font-family: 'Fira Code', monospace;
   }
+}
+
+.trace-alert-banner {
+  background-color: rgba(14, 165, 233, 0.1) !important;
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  margin-top: 10px;
+}
+.trace-alert-banner :deep(.el-alert__title) {
+  color: #38bdf8 !important;
 }
 </style>

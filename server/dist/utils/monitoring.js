@@ -25,6 +25,10 @@ function serverMonitoringCleanup(db, conn) {
         });
         db.remove({ '_id': { '$in': idArray } }, { multi: true }, function (err, newDoc) { });
     });
+    // Also clean up old Phoenix records (retain 24h)
+    const cutoff = new Date();
+    cutoff.setHours(cutoff.getHours() - 24);
+    db.remove({ type: 'phoenix', timestamp: { $lt: cutoff } }, { multi: true }, function () { });
 }
 ;
 // runs a regular job against the connections and inserts into a local DB
@@ -134,3 +138,26 @@ function getDocCounts(currCounts, newCounts) {
     }
     return newDocCounts;
 }
+/**
+ * Background job: collect a Phoenix snapshot and persist it to local NeDB.
+ * Should be called every ~30 seconds from the server startup setInterval.
+ */
+exports.phoenixMonitoring = async function (monitoringDB) {
+    try {
+        // Lazy-import to avoid circular deps at startup
+        const { collectPhoenixSnapshot } = await import('../agent/tools/phoenix.tools.js');
+        const snapshot = await collectPhoenixSnapshot();
+        // Persist to local NeDB as a phoenix-typed record
+        monitoringDB.insert({ type: 'phoenix', ...snapshot }, function (err) {
+            if (err)
+                console.error('[PhoenixMonitor] Failed to persist snapshot:', err);
+        });
+        // Cleanup old records (keep only last 24 hours)
+        const cutoff = new Date();
+        cutoff.setHours(cutoff.getHours() - 24);
+        monitoringDB.remove({ type: 'phoenix', timestamp: { $lt: cutoff } }, { multi: true }, function () { });
+    }
+    catch (err) {
+        console.error('[PhoenixMonitor] Background job error:', err.message);
+    }
+};

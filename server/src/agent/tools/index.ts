@@ -123,6 +123,20 @@ const toolSchemas: Record<string, any> = {
     type: 'OBJECT',
     properties: {}
   },
+  runAgentEvaluation: {
+    type: 'OBJECT',
+    properties: {
+      traceId: { type: 'STRING', description: 'The ID of the trace to evaluate' }
+    },
+    required: ['traceId']
+  },
+  getSpanAnnotations: {
+    type: 'OBJECT',
+    properties: {
+      spanId: { type: 'STRING', description: 'The ID of the span to retrieve annotations for' }
+    },
+    required: ['spanId']
+  },
   explainQueryPlan: {
     type: 'OBJECT',
     properties: {
@@ -175,7 +189,27 @@ function toFunctionTools(module: Record<string, any>): FunctionTool[] {
           name: name,
           description: `Tool to ${description}. Arguments must match types strictly. Query filters must be valid JSON strings.`,
           parameters: schema,
-          execute: async (args: any) => await fn(args)
+          execute: async (args: any) => {
+            const { withSpan, trace } = require('@arizeai/phoenix-otel');
+            return await withSpan(
+              async () => {
+                const span = trace.getActiveSpan();
+                if (span) {
+                  span.setAttributes({
+                    "input.value": JSON.stringify(args)
+                  });
+                }
+                const result = await fn(args);
+                if (span) {
+                  span.setAttributes({
+                    "output.value": JSON.stringify(result)
+                  });
+                }
+                return result;
+              },
+              { name: name, kind: 'TOOL' }
+            )();
+          }
         });
       } catch (err) {
         console.error(`Failed to register tool: ${name}`, err);

@@ -48,6 +48,26 @@ async function getMcpClient(): Promise<Client | null> {
       mcpClient = client;
       currentActiveUri = uri;
       console.log("[Agent Tool] Successfully connected and synchronized with mongodb-mcp-server!");
+
+      // Handle unexpected pipe closure (EPIPE) from the MCP subprocess gracefully.
+      // Without this, Node.js throws an unhandled 'error' event and crashes.
+      (transport as any)._subprocess?.stderr?.on('error', (err: any) => {
+        if (err.code !== 'EPIPE') console.error('[Agent Tool] MCP stderr error:', err);
+      });
+      (transport as any)._subprocess?.stdin?.on('error', (err: any) => {
+        if (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED') {
+          console.warn('[Agent Tool] MCP stdin pipe closed. Resetting client for reconnection.');
+          mcpClient = null;
+        } else {
+          console.error('[Agent Tool] MCP stdin error:', err);
+        }
+      });
+      process.on('uncaughtException', (err: any) => {
+        if (err.code === 'EPIPE') {
+          console.warn('[Agent Tool] EPIPE caught globally — MCP child process closed. Reconnecting on next call.');
+          mcpClient = null;
+        }
+      });
     }
 
     return mcpClient;
@@ -504,9 +524,11 @@ export async function createIndex({
     const mcpRes = await callMcpTool('create-index', {
       database: db,
       collection,
-      index: parsedKeys,
-      unique: parsedOptions.unique || false,
-      name: parsedOptions.name || undefined
+      name: parsedOptions.name || undefined,
+      definition: [{
+        type: 'classic',
+        keys: parsedKeys
+      }]
     });
 
     if (mcpRes) {
@@ -588,36 +610,32 @@ export async function getServerStatus() {
 
 /**
  * Check Arize Phoenix real-time observability telemetry metrics (slow queries, trace alerts, CPU spikes).
+ * Connects to a running Arize Phoenix instance via @arizeai/phoenix-mcp over stdio.
+ * Falls back to simulated data if Phoenix is not reachable (for demo purposes).
  */
 export async function checkArizePhoenixMetrics() {
   console.log('[Agent Tool] Retrieving Arize Phoenix observability traces...');
-  return {
-    status: 'WARNING',
-    cpuUsage: 89.2,
-    memoryUsagePercent: 74.5,
-    activeSpanCount: 1420,
-    traceSummary: 'Critical slow queries detected on MongoDB connection.',
-    slowQueries: [
-      {
-        traceId: 'span-98124a',
-        db: 'sample_mflix',
-        collection: 'comments',
-        operation: 'find',
-        filter: '{"movie_id": {"$oid": "573a1390f293160aaa410519"}}',
-        durationMs: 2150,
-        frequencyPerMin: 45
-      },
-      {
-        traceId: 'span-98125b',
-        db: 'sample_mflix',
-        collection: 'movies',
-        operation: 'find',
-        filter: '{"year": {"$lt": 1990}, "genres": "Drama"}',
-        durationMs: 1820,
-        frequencyPerMin: 12
-      }
-    ]
-  };
+  const { getSlowQueryTraces } = await import('./phoenix.tools.js');
+  const result = await getSlowQueryTraces(500);
+  return result;
+}
+
+/**
+ * Run an evaluation on a specific trace using Arize Phoenix MCP.
+ */
+export async function runAgentEvaluation(args: { traceId: string }) {
+  console.log('[Agent Tool] Running Phoenix evaluation for trace:', args.traceId);
+  const { runAgentEvaluation } = await import('./phoenix.tools.js');
+  return await runAgentEvaluation(args.traceId);
+}
+
+/**
+ * Get annotations (feedback, evals) for a specific span using Arize Phoenix MCP.
+ */
+export async function getSpanAnnotations(args: { spanId: string }) {
+  console.log('[Agent Tool] Retrieving Phoenix annotations for span:', args.spanId);
+  const { getSpanAnnotations } = await import('./phoenix.tools.js');
+  return await getSpanAnnotations(args.spanId);
 }
 
 /**

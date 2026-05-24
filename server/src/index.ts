@@ -1,4 +1,5 @@
-// import 'module-alias/register';
+import './agent/tracing';
+import { traceMongoApiMiddleware } from './agent/tracing';
 import { Router, Request, Response, NextFunction } from 'express';
 import express from "express";
 import path from "path";
@@ -101,6 +102,9 @@ app.use(function (req: Request, res: Response, next: any) {
     next();
 });
 
+// Trace all /api/ requests as OpenInference RETRIEVAL spans in Arize Phoenix
+app.use('/api', traceMongoApiMiddleware);
+
 // Mount JSON API routes
 if (app_context !== '') {
     app.use(app_context, apiRoute);
@@ -176,10 +180,12 @@ connectionStore.listConnections().then((savedConnections) => {
 
             // Trigger monitoring polling
             monitoring.serverMonitoring(db, app.locals.dbConnections);
+            monitoring.phoenixMonitoring(db);
 
             // Repeat monitor query ticker every 30 seconds
             setInterval(function () {
                 monitoring.serverMonitoring(db, app.locals.dbConnections);
+                monitoring.phoenixMonitoring(db);
             }, 30000);
         }).on('error', function (err: any) {
             if (err.code === 'EADDRINUSE') {

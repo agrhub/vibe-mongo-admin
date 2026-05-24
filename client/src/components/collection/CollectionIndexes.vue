@@ -233,9 +233,13 @@ const createIndex = async () => {
     return;
   }
 
+  const conn = route.params.conn || store.activeConnection;
+  const db = route.params.db || store.activeDb;
+  const coll = activeCollectionName.value;
+
   saving.value = true;
   try {
-    await axios.post(`/api/${store.activeConnection}/${store.activeDb}/${store.activeColl}/index/create`, {
+    await axios.post(`/api/${conn}/${db}/${coll}/index/create`, {
       keys:   indexForm.keys,
       unique: indexForm.unique,
       sparse: indexForm.sparse
@@ -253,15 +257,19 @@ const createIndex = async () => {
 
 // ── Update (Drop → Recreate) ──────────────────────────────────────
 const updateIndex = async () => {
+  const conn = route.params.conn || store.activeConnection;
+  const db = route.params.db || store.activeDb;
+  const coll = activeCollectionName.value;
+
   saving.value = true;
   try {
     // Step 1: drop the existing index
-    await axios.post(`/api/${store.activeConnection}/${store.activeDb}/${store.activeColl}/index/drop`, {
+    await axios.post(`/api/${conn}/${db}/${coll}/index/drop`, {
       index_name: editingIndexName.value
     });
 
     // Step 2: recreate with the same keys but updated options
-    await axios.post(`/api/${store.activeConnection}/${store.activeDb}/${store.activeColl}/index/create`, {
+    await axios.post(`/api/${conn}/${db}/${coll}/index/create`, {
       keys:   indexForm.keys,
       unique: indexForm.unique,
       sparse: indexForm.sparse
@@ -289,9 +297,13 @@ const handleDropIndex = (indexName: string) => {
       type: 'warning'
     }
   ).then(async () => {
+    const conn = route.params.conn || store.activeConnection;
+    const db = route.params.db || store.activeDb;
+    const coll = activeCollectionName.value;
+
     loading.value = true;
     try {
-      await axios.post(`/api/${store.activeConnection}/${store.activeDb}/${store.activeColl}/index/drop`, {
+      await axios.post(`/api/${conn}/${db}/${coll}/index/drop`, {
         index_name: indexName
       });
       ElMessage.success(store.t('Index successfully dropped'));

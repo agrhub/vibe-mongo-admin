@@ -50,22 +50,34 @@ While traditional tools like MongoDB Compass offer solid administration, **VibeM
 ![Connections](docs/images/connections.png)
 ![Add Connection](docs/images/add_connection.png)
 ![Edit Connection](docs/images/edit_connection.png)
+![Delete Connection](docs/images/delete_connection.png)
 
 ### Dashboard & Databases
 ![Connection Dashboard](docs/images/dashboard.png)
+![Database Explorer](docs/images/db_explorer.png)
 ![Create Database](docs/images/create_database.png)
 ![Rename Database](docs/images/rename_database.png)
+![Drop Database](docs/images/drop_database.png)
+![Add Database User](docs/images/add_user.png)
+![Database AI Analysis Loading](docs/images/db_analysis_loading.png)
+![Database AI Analysis Dashboard](docs/images/db_analysis.png)
+![Database AI Analysis Charts](docs/images/db_analysis_charts.png)
+![MongoDB Atlas Cluster Metrics](docs/images/mongodb_atlas_clusters.png)
 
 ### Collections
 ![Collections View](docs/images/collections.png)
 ![Create Collection](docs/images/create_collection.png)
 ![Rename Collection](docs/images/rename_collection.png)
+![Drop Collection](docs/images/drop_collection.png)
+![Collection Schema Analyzer](docs/images/schema.png)
 
 ### Documents
-![Documents View](docs/images/documents.png)
+![Query Console](docs/images/query_console.png)
+![Quick Filter Builder](docs/images/filter_builder.png)
+![Documents Table View](docs/images/documents.png)
+![Documents List View](docs/images/documents_list.png)
 ![Document Editor](docs/images/document_editor.png)
 ![Insert New Document](docs/images/insert_document.png)
-![Quick Filter Builder](docs/images/filter_builder.png)
 
 ### Indexes
 ![Collection Indexes](docs/images/indexes.png)
@@ -78,14 +90,64 @@ While traditional tools like MongoDB Compass offer solid administration, **VibeM
 
 ### AI Agent (MongoDB MCP)
 ![Agent Welcome](docs/images/agent_welcome.png)
+![Agent Thinking State](docs/images/agent_thinking.png)
+![Agent Databases Response](docs/images/agent_databases.png)
+![Agent Autocomplete Support](docs/images/agent_autocomplete.png)
 ![Agent Schema Analysis](docs/images/agent_schema.png)
 ![Agent Data Query](docs/images/agent_table.png)
-![Agent Data Visualization](docs/images/agent_chart.png)
+![Agent Data Visualization (Sidebar)](docs/images/agent_chart.png)
+![Agent Data Visualization (Full Page)](docs/images/agent_chart_full.png)
+![Agent Index Analysis](docs/images/agent_indexes.png)
+![Agent Index Recommendations](docs/images/agent_indexes_recommendations.png)
+![Agent Index Comparison](docs/images/agent_indexes_comparison.png)
+
+### DB-Guardian (AI-Driven SRE)
+![DB-Guardian Diagnostic Report](docs/images/guardian_diagnostic.png)
+![DB-Guardian Resolution & Performance Chart](docs/images/guardian_resolution.png)
+
+### AI Judge (Observability & Telemetry)
+![AI Judge Trace Evaluation](docs/images/judge_trace_eval.png)
+![AI Judge Diagnostic Summary](docs/images/judge_diagnostic_summary.png)
+![AI Judge SRE Recommendations](docs/images/judge_recommendations.png)
+![AI Judge Optimization Suggestion](docs/images/judge_optimize_frequency.png)
+![AI Judge Caching Strategy Implementation](docs/images/judge_caching_strategy.png)
+![AI Judge Trace Evaluation Trigger](docs/images/monitoring_trace_ai_evaluate.png)
+![AI Judge Bottleneck Analysis Response](docs/images/monitoring_trace_ai_response.png)
+![AI Judge Predictive Scaling Model](docs/images/monitoring_trace_ai_predictive.png)
+![AI Judge Detailed Evaluation Prompt](docs/images/judge_trace_prompt.png)
+![AI Judge SRE Breakdown Operation](docs/images/judge_breakdown_operation.png)
+![AI Judge SRE Output & Score Assessment](docs/images/judge_breakdown_output_scoring.png)
+![AI Judge Security & Privacy Audit](docs/images/judge_breakdown_scoring_security.png)
+![AI Judge Data Leakage Assessment](docs/images/judge_breakdown_security_leakage.png)
+
+### Observability Dashboard & Telemetry
+![SRE Health Assessment & Real-Time Metrics](docs/images/monitoring_metrics.png)
+![Resident Memory vs Database Connections](docs/images/monitoring_memory_connections.png)
+![Arize Phoenix Observability Telemetry](docs/images/phoenix_observability_traces.png)
+![Trace Latency Percentiles & Average Annotation Score](docs/images/phoenix_observability_latency.png)
+![Model Token Usage Analysis](docs/images/phoenix_observability_token_usage.png)
+![All Trace Spans Table Logs](docs/images/monitoring_traces_list.png)
+![DB-Guardian Active Spans Alert Banner](docs/images/monitoring_alerts_list.png)
+![Traces filtered list view](docs/images/monitoring_traces_filtered.png)
+![Trace Detail Explorer Parent Span](docs/images/monitoring_trace_detail_parent.png)
+![Trace Detail Explorer Sub-span Data](docs/images/monitoring_trace_detail_subspan.png)
+![Trace Attributes Table Drawer](docs/images/monitoring_trace_attributes.png)
+![Trace Gantt-Waterfall Bottleneck Visualizer](docs/images/monitoring_trace_waterfall.png)
+![Arize Phoenix Portal Tracing Dashboard](docs/images/phoenix_dashboard_tracing.png)
+![Arize Phoenix Portal Metrics Graphs](docs/images/phoenix_dashboard_metrics.png)
+![Arize Phoenix Portal Trace Detail View](docs/images/phoenix_dashboard_trace_detail.png)
+![Arize Phoenix Portal Tool Output Detail](docs/images/phoenix_dashboard_tool_output.png)
 
 ### Personalization (i18n & Theming)
 ![Internationalization](docs/images/i18n_menu.png)
 ![Light Mode](docs/images/theme_light.png)
 ![Dark Mode](docs/images/theme_dark.png)
+
+### GCP Cloud Run Production Deployment
+![GCP Cloud Run Observability Metrics](docs/images/gcp_cloud_run_metrics.png)
+![GCP Cloud Run Live Logs](docs/images/gcp_cloud_run_logs.png)
+![GCP Cloud Run Revisions List](docs/images/gcp_cloud_run_revisions.png)
+![GCP Cloud Run Deploy Container Configuration](docs/images/gcp_cloud_run_deploy.png)
 
 </details>
 

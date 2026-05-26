@@ -1,3 +1,4 @@
+import { mongoService } from '../services/MongoService';
 import { Router, Request as ExpressRequest, Response } from 'express';
 type Request = ExpressRequest<any>;
 
@@ -7,7 +8,7 @@ const router = Router();
 
 // Create user
 router.post('/api/:conn/:db/user/create', function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection' });
     }
@@ -39,7 +40,7 @@ router.post('/api/:conn/:db/user/create', function (req: Request, res: Response)
 
 // Delete user
 router.post('/api/:conn/:db/user/delete', function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection' });
     }

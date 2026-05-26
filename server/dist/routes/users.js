@@ -1,11 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const MongoService_1 = require("../services/MongoService");
 const express_1 = require("express");
 const router = (0, express_1.Router)();
 // ================= DB USERS =================
 // Create user
 router.post('/api/:conn/:db/user/create', function (req, res) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = MongoService_1.mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection' });
     }
@@ -31,7 +32,7 @@ router.post('/api/:conn/:db/user/create', function (req, res) {
 });
 // Delete user
 router.post('/api/:conn/:db/user/delete', function (req, res) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = MongoService_1.mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection' });
     }

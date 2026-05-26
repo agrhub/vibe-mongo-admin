@@ -10,32 +10,44 @@ export interface CollectionStats {
   totalIndexSize: number;
 }
 
+export interface ConnectionObject {
+  client: MongoClient;
+  connString: string;
+  connOptions: any;
+  native: Db;
+}
+
 export class MongoService {
-  private activeClient: MongoClient | null = null;
-  private activeUri: string | null = null;
-  private activeConnectionName: string | null = null;
+  private connections: Map<string, ConnectionObject> = new Map();
+  private defaultConnectionName: string | null = null;
 
   /**
-   * Connect to a MongoDB instance
+   * Connect to a MongoDB instance and store it
    */
-  async connect(uri: string, name: string): Promise<boolean> {
+  async connect(uri: string, name: string, options: any = {}): Promise<boolean> {
     try {
-      if (this.activeClient) {
-        await this.disconnect();
+      if (this.connections.has(name)) {
+        await this.disconnect(name);
       }
       console.log(`[MongoService] Connecting to MongoDB: ${name} (URI: ${uri.replace(/:([^@:]+)@/, ':****@')})`);
       const client = new MongoClient(uri, {
         connectTimeoutMS: 5000,
-        serverSelectionTimeoutMS: 5000
+        serverSelectionTimeoutMS: 5000,
+        ...options
       });
       await client.connect();
       
       // Ping database to confirm validity
       await client.db('admin').command({ ping: 1 });
       
-      this.activeClient = client;
-      this.activeUri = uri;
-      this.activeConnectionName = name;
+      const dbObj: ConnectionObject = {
+        client,
+        connString: uri,
+        connOptions: options,
+        native: client.db('admin')
+      };
+      
+      this.connections.set(name, dbObj);
       console.log(`[MongoService] Connected successfully to ${name}`);
       return true;
     } catch (err) {
@@ -45,60 +57,94 @@ export class MongoService {
   }
 
   /**
-   * Disconnect from current MongoDB instance
+   * Disconnect from a MongoDB instance
    */
-  async disconnect(): Promise<void> {
-    if (this.activeClient) {
-      await this.activeClient.close();
-      this.activeClient = null;
-      this.activeUri = null;
-      this.activeConnectionName = null;
-      console.log('[MongoService] Disconnected from active database connection');
+  async disconnect(name: string): Promise<void> {
+    const conn = this.connections.get(name);
+    if (conn) {
+      try {
+        await conn.client.close();
+      } catch (e) {}
+      this.connections.delete(name);
+      console.log(`[MongoService] Disconnected from ${name}`);
     }
   }
 
   /**
-   * Get active connection info
-   */
-  getActiveInfo() {
-    return {
-      connected: this.activeClient !== null,
-      name: this.activeConnectionName,
-      uri: this.activeUri ? this.activeUri.replace(/:([^@:]+)@/, ':****@') : null
-    };
-  }
-
-  /**
-   * Expose raw connection URI (decrypted)
-   */
-  getActiveUri(): string | null {
-    return this.activeUri;
-  }
-
-  /**
-   * Directly set the active connection client, URI, and name
+   * Set a default/active connection for legacy/singleton operations (like Agent Tools)
    */
   setActiveConnection(client: MongoClient, uri: string, name: string): void {
-    this.activeClient = client;
-    this.activeUri = uri;
-    this.activeConnectionName = name;
+    if (!this.connections.has(name)) {
+      this.connections.set(name, {
+        client,
+        connString: uri,
+        connOptions: {},
+        native: client.db('admin')
+      });
+    }
+    this.defaultConnectionName = name;
+  }
+
+  getActiveUri(): string | null {
+    if (this.defaultConnectionName && this.connections.has(this.defaultConnectionName)) {
+      return this.connections.get(this.defaultConnectionName)!.connString;
+    }
+    if (this.connections.size > 0) {
+      return Array.from(this.connections.values())[0].connString;
+    }
+    return null;
   }
 
   /**
-   * Safe getter for the active MongoClient
+   * Add an already established connection (e.g. from legacy utils/connections.ts)
    */
-  getClient(): MongoClient {
-    if (!this.activeClient) {
+  addConnectionObject(name: string, connObj: ConnectionObject): void {
+    this.connections.set(name, connObj);
+  }
+
+  /**
+   * Safe getter for a connection object
+   */
+  getConnection(name: string): ConnectionObject {
+    const conn = this.connections.get(name);
+    if (!conn) {
+      throw new Error(`Invalid connection name: ${name}`);
+    }
+    return conn;
+  }
+
+  /**
+   * Get all active connections
+   */
+  getConnections(): Record<string, ConnectionObject> {
+    const result: Record<string, ConnectionObject> = {};
+    for (const [key, value] of this.connections.entries()) {
+      result[key] = value;
+    }
+    return result;
+  }
+
+  /**
+   * Safe getter for the active MongoClient (for backwards compatibility if needed, using the first connection, or specific name)
+   */
+  getClient(name?: string): MongoClient {
+    if (name) {
+      return this.getConnection(name).client;
+    }
+    if (this.defaultConnectionName && this.connections.has(this.defaultConnectionName)) {
+      return this.connections.get(this.defaultConnectionName)!.client;
+    }
+    if (this.connections.size === 0) {
       throw new Error('No active database connection. Please connect to a MongoDB server first.');
     }
-    return this.activeClient;
+    return Array.from(this.connections.values())[0].client;
   }
 
   /**
    * Safe getter for a DB
    */
-  getDb(dbName: string): Db {
-    return this.getClient().db(dbName);
+  getDb(dbName: string, name?: string): Db {
+    return this.getClient(name).db(dbName);
   }
 
   /**

@@ -1,3 +1,4 @@
+import { mongoService } from '../services/MongoService';
 import { Router, Request as ExpressRequest, Response } from 'express';
 type Request = ExpressRequest<any>;
 import _ from "lodash";
@@ -12,7 +13,7 @@ const router = Router();
 
 // Paginated documents search
 router.post('/api/:conn/:db/:coll/documents', function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
     var docs_per_page = parseInt(req.body.docsPerPage) || 5;
     var page = parseInt(req.body.page) || 1;
 
@@ -134,7 +135,7 @@ router.post('/api/:conn/:db/:coll/documents', function (req: Request, res: Respo
 
 // Single document get (for editing)
 router.get('/api/:conn/:db/:coll/document/:id', function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection name' });
     }
@@ -182,7 +183,7 @@ router.get('/api/:conn/:db/:coll/document/:id', function (req: Request, res: Res
 
 // Insert new document(s)
 router.post('/api/:conn/:db/:coll/document/insert', function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection name' });
     }
@@ -232,7 +233,7 @@ router.post('/api/:conn/:db/:coll/document/insert', function (req: Request, res:
 
 // Edit existing document
 router.post('/api/:conn/:db/:coll/document/edit', function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection name' });
     }
@@ -267,7 +268,7 @@ router.post('/api/:conn/:db/:coll/document/edit', function (req: Request, res: R
 
 // Delete single document
 router.post('/api/:conn/:db/:coll/document/delete', function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection name' });
     }
@@ -305,7 +306,7 @@ router.post('/api/:conn/:db/:coll/document/delete', function (req: Request, res:
 
 // Mass delete documents
 router.post('/api/:conn/:db/:coll/document/mass_delete', function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection name' });
     }

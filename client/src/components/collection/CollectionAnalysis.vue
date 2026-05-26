@@ -130,7 +130,7 @@
                           type="primary" 
                           size="small" 
                           :icon="CaretRight" 
-                          round text bg
+                          round text
                           @click="runQueryInChat(chart)"
                         >
                           {{ store.t('Run') }}
@@ -170,6 +170,7 @@ import {
   LegendComponent
 } from 'echarts/components';
 import VChart from 'vue-echarts';
+import { buildChartOption } from '../../utils/chartBuilder';
 
 use([CanvasRenderer, BarChart, PieChart, LineChart, TitleComponent, TooltipComponent, GridComponent, LegendComponent]);
 
@@ -222,7 +223,10 @@ async function fetchAIAnalysis() {
       `/api/${store.activeConnection}/${store.activeDb}/${store.activeColl}/ai-analysis`,
       { customPrompt: customPrompt.value }
     );
-    analysisData.value = res.data.charts || [];
+    analysisData.value = (res.data.charts || []).map((chart) => ({
+      ...chart,
+      option: buildChartOption(chart, chart.results || [], chartTheme.value === 'dark')
+    }));
     insightsText.value = res.data.insights || '';
   } catch (e) {
     console.error(e);
@@ -361,8 +365,10 @@ watch(() => store.activeColl, () => {
 }
 
 .insights-card {
-  background: rgba(30, 41, 59, 0.3) !important;
-  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  /* background: rgba(30, 41, 59, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important; */
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
 }
 
 .card-header {
@@ -372,20 +378,20 @@ watch(() => store.activeColl, () => {
 }
 
 .insight-icon {
-  color: #e6a23c;
+  color: var(--el-color-primary);
   font-size: 1.2rem;
 }
 
 .card-title {
   font-size: 1rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .insights-content {
   line-height: 1.6;
   font-size: 0.95rem;
-  color: #d1d5db;
+  color: var(--text-primary);
 }
 
 .insights-content :deep(p) {
@@ -394,7 +400,7 @@ watch(() => store.activeColl, () => {
 }
 
 .insights-content :deep(strong) {
-  color: #fff;
+  color: var(--el-color-primary);
 }
 
 .charts-grid {
@@ -410,8 +416,10 @@ watch(() => store.activeColl, () => {
 }
 
 .chart-card {
-  background: rgba(30, 41, 59, 0.3) !important;
-  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  /* background: rgba(30, 41, 59, 0.3) !important; */
+  /* border: 1px solid rgba(255, 255, 255, 0.05) !important; */
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -431,14 +439,14 @@ watch(() => store.activeColl, () => {
 .chart-title {
   margin: 0 0 4px 0;
   font-size: 1rem;
-  color: #fff;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 .chart-desc {
   margin: 0;
   font-size: 0.8rem;
-  color: #888;
+  color: var(--text-secondary);
 }
 
 .chart-type-tag {
@@ -451,7 +459,7 @@ watch(() => store.activeColl, () => {
 }
 
 .pipeline-section {
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border-color);
   margin-top: 12px;
 }
 
@@ -461,14 +469,14 @@ watch(() => store.activeColl, () => {
 
 .pipeline-section :deep(.el-collapse-item__header) {
   background-color: transparent;
-  color: #aaa;
+  color: var(--text-primary);
   border-bottom: none;
   height: 36px;
   font-size: 0.8rem;
 }
 
 .pipeline-section :deep(.el-collapse-item__wrap) {
-  background-color: rgba(15, 23, 42, 0.6);
+  background-color: var(--bg-secondary);
   border-bottom: none;
   border-radius: 4px;
 }
@@ -506,7 +514,7 @@ watch(() => store.activeColl, () => {
   margin: 0;
   font-family: 'Fira Code', 'Courier New', Courier, monospace;
   font-size: 0.75rem;
-  color: #38bdf8;
+  color: var(--el-color-primary);
   white-space: pre-wrap;
 }
 </style>

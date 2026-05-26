@@ -314,7 +314,7 @@ const handleLogin = async () => {
   padding: 1.5rem;
   border-radius: var(--radius-lg) !important;
   box-shadow: 0 20px 40px rgba(0,0,0,0.2) !important;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
   backdrop-filter: blur(10px);
 }

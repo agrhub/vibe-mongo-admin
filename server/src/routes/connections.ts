@@ -1,3 +1,4 @@
+import { mongoService } from '../services/MongoService';
 import { Router, Request as ExpressRequest, Response } from 'express';
 type Request = ExpressRequest<any>;
 import * as common from './common';
@@ -146,7 +147,7 @@ router.post('/api/connections/delete', async function (req: Request, res: Respon
 
 // Sidebar tree list
 router.get('/api/:conn/sidebar', function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection name' });
     }

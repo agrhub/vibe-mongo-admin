@@ -48,20 +48,20 @@ VibeMongo Admin is a full-stack MongoDB administration platform with an embedded
 │                                         └────────────┬───────────────┘  │
 └──────────────────────────────────────────────────────┼──────────────────┘
                                                        │
-                         ┌─────────────────────────────┴──────────────────┐
+                           ┌─────────────────────────────┴──────────────────┐
                          │              EXTERNAL SERVICES                  │
                          │                                                 │
            ┌─────────────┴──────────────┐   ┌──────────────────────────┐  │
            │  mongodb-mcp-server        │   │  Google Vertex AI /      │  │
            │  (npx subprocess, stdio)   │   │  Gemini API              │  │
            │  MCP Protocol (JSON-RPC)   │   │  (LLM inference)         │  │
-           └─────────────┬──────────────┘   └──────────────────────────┘  │
-                         │                                                 │
-           ┌─────────────▼──────────────┐                                  │
-           │   MongoDB                  │                                  │
-           │   (Atlas / self-hosted)    │                                  │
-           └────────────────────────────┘                                  │
-                                        └────────────────────────────────-─┘
+           └─────────────┬──────────────┘   └────────────┬─────────────┘  │
+                         │                               │                │
+           ┌─────────────▼──────────────┐   ┌────────────▼─────────────┐  │
+           │   MongoDB                  │   │  Arize Phoenix MCP &     │  │
+           │   (Atlas / self-hosted)    │   │  Cloud (Telemetry)       │  │
+           └────────────────────────────┘   └──────────────────────────┘  │
+                                        └─────────────────────────────────┘
 ```
 
 ---
@@ -101,7 +101,8 @@ VibeMongo Admin is a full-stack MongoDB administration platform with an embedded
 | LLM Model | Gemini (via Vertex AI) | Natural language understanding |
 | Tool Transport | MCP stdio subprocess | Bridge to mongodb-mcp-server |
 | MCP SDK | `@modelcontextprotocol/sdk` | JSON-RPC over stdio |
-| MCP Server | `mongodb-mcp-server` (npx) | Official MongoDB MCP tools |
+| Database Tools | `mongodb-mcp-server` (npx) | Official MongoDB MCP tools |
+| Telemetry Tools| `@arizeai/phoenix-mcp` | Trace monitoring & DB-Guardian |
 | Session | `InMemoryRunner` | Per-user conversation history |
 
 ---
@@ -127,6 +128,45 @@ Browser → POST /api/agent/chat
   ← JSON result (message, suggestions, navigation, chart, databases, collections)
 ← Rendered chat message + ECharts visual + clickable navigation
 ```
+
+### DB-Guardian & AI Judge Evaluate Flow
+```mermaid
+sequenceDiagram
+    participant User
+    participant VueUI as VibeMongo UI
+    participant Backend as Express API
+    participant Agent as Google ADK (Gemini)
+    participant Phoenix as Arize Phoenix MCP
+    
+    User->>VueUI: Opens Trace Waterfall or slow query
+    VueUI->>Backend: Fetch active trace telemetry
+    Backend->>Phoenix: Request span data
+    Phoenix-->>VueUI: Returns trace with execution inputs/outputs
+    
+    User->>VueUI: Clicks "AI Judge Evaluate"
+    VueUI->>VueUI: Extracts raw input & output from span
+    VueUI->>Agent: Sends context: "Evaluate this trace step-by-step..."
+    
+    Agent->>Agent: Analyzes safety, correctness, and reasoning
+    Agent-->>VueUI: Returns human-readable explanation and score (SAFE/SUBOPTIMAL)
+    VueUI-->>User: Displays evaluation directly in Chatbot
+```
+
+## Server Bootstrapping & State Management
+
+VibeMongo utilizes a modular bootstrapping pattern to start the Express application. The entrypoint `server/src/index.ts` sequentially invokes isolated bootstrap modules:
+
+1. **`config.ts`**: Parses `nconf` and environment variables.
+2. **`database.ts`**: Initializes the internal `@seald-io/nedb` engine for server stats/monitoring.
+3. **`middlewares.ts`**: Mounts CORS, session management, and global error handlers.
+4. **`routes.ts`**: Mounts the main `/api` router, OpenInference tracing, and the SPA static fallback.
+
+### Global State & Dependency Injection
+
+VibeMongo has eradicated the Express anti-pattern of using `req.app.locals` for mutable global state. 
+- **Connection Manager**: Database connections are managed by a centralized, multi-tenant `MongoService`. It securely stores connection objects (`MongoClient` instances) in memory using a strongly-typed `Map<string, ConnectionObject>`.
+- **Dependency Injection**: Route handlers (`databases.ts`, `collections.ts`, etc.) retrieve the correct active connection object by injecting `mongoService.getConnection(req.params.conn)` instead of accessing a global singleton.
+- **Agent Context Sync**: For backwards compatibility with the AI agent layer, `MongoService` tracks an "active context" via `setActiveConnection()` during chat operations.
 
 ---
 

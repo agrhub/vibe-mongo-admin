@@ -90,8 +90,136 @@ router.get('/api/:conn/monitoring', function (req, res) {
     });
 });
 // Get Phoenix metrics from local NeDB (pre-computed by background job)
+// Get Phoenix metrics from local NeDB (pre-computed by background job)
 router.get('/api/:conn/monitoring/phoenix', async function (req, res) {
     try {
+        const isLive = req.query.live === 'true';
+        // Server-side filter params forwarded from the client search bar
+        const searchText = (req.query.search || '').trim().toLowerCase();
+        const filterStatus = (req.query.status || '').trim().toUpperCase();
+        const filterKind = (req.query.kind || '').trim().toLowerCase();
+        /** Apply search/status/kind filter to a flat rootSpans array */
+        function filterSpans(spans) {
+            return spans.filter((s) => {
+                const kind = (s.kind ?? 'chain').toLowerCase();
+                const status = (s.statusCode ?? 'OK').toUpperCase();
+                const name = (s.name ?? '').toLowerCase();
+                const input = (typeof s.input === 'string' ? s.input : JSON.stringify(s.input ?? '')).toLowerCase();
+                const output = (typeof s.output === 'string' ? s.output : JSON.stringify(s.output ?? '')).toLowerCase();
+                const db = (s.db ?? '').toLowerCase();
+                if (filterStatus && status !== filterStatus)
+                    return false;
+                if (filterKind && kind !== filterKind)
+                    return false;
+                if (!searchText)
+                    return true;
+                // Key-value expression parser, e.g. "span_kind == 'llm'" or "latency > 500"
+                const matchExpr = searchText.match(/^([a-z_.]+)\s*(==|!=|>=|<=|>|<|contains)\s*['"]?(.*?)['"]?$/i);
+                if (matchExpr) {
+                    const [, fieldRaw, op, val] = matchExpr;
+                    const field = fieldRaw.replace(/_/g, '').replace(/\./g, '');
+                    let target = '';
+                    if (['spankind', 'kind'].includes(field))
+                        target = kind;
+                    else if (['statuscode', 'status'].includes(field))
+                        target = status.toLowerCase();
+                    else if (field === 'name')
+                        target = name;
+                    else if (field === 'input')
+                        target = input;
+                    else if (field === 'output')
+                        target = output;
+                    else if (['dbname', 'db'].includes(field))
+                        target = db;
+                    else if (['latency', 'durationms', 'latencyms'].includes(field)) {
+                        const num = Number(s.durationMs ?? 0);
+                        const valNum = Number(val);
+                        if (op === '==')
+                            return num === valNum;
+                        if (op === '!=')
+                            return num !== valNum;
+                        if (op === '>')
+                            return num > valNum;
+                        if (op === '<')
+                            return num < valNum;
+                        if (op === '>=')
+                            return num >= valNum;
+                        if (op === '<=')
+                            return num <= valNum;
+                        return false;
+                    }
+                    else {
+                        target = String(s[fieldRaw] ?? '').toLowerCase();
+                    }
+                    if (op === '==')
+                        return target === val.toLowerCase();
+                    if (op === '!=')
+                        return target !== val.toLowerCase();
+                    if (op === 'contains')
+                        return target.includes(val.toLowerCase());
+                    return false;
+                }
+                // Full-text fallback
+                return name.includes(searchText) || kind.includes(searchText) ||
+                    status.toLowerCase().includes(searchText) || input.includes(searchText) ||
+                    output.includes(searchText) || db.includes(searchText);
+            });
+        }
+        /** Build structured alerts from spans with durationMs above threshold */
+        function buildAlertsFromSpans(spans, thresholdMs = 1000) {
+            const slowSpans = spans
+                .filter((s) => (s.durationMs ?? 0) >= thresholdMs)
+                .sort((a, b) => (b.durationMs ?? 0) - (a.durationMs ?? 0));
+            if (slowSpans.length === 0) {
+                return { source: 'live', status: 'OK', slowQueries: [] };
+            }
+            const slowQueries = slowSpans.map((s) => ({
+                traceId: s.traceId ?? s.spanId ?? '',
+                spanId: s.spanId ?? '',
+                name: s.name ?? 'unknown',
+                db: s.db ?? '',
+                collection: s.collection ?? '',
+                operation: s.kind ?? 'chain',
+                durationMs: Math.round(s.durationMs ?? 0),
+                statusCode: s.statusCode ?? 'OK',
+                startTime: s.startTime ?? '',
+            }));
+            const maxMs = slowQueries[0].durationMs;
+            return {
+                source: 'live',
+                status: 'WARNING',
+                traceSummary: `${slowSpans.length} slow span(s) detected. Worst: ${slowQueries[0].name} (${maxMs}ms)`,
+                slowQueries,
+            };
+        }
+        if (isLive) {
+            try {
+                const { collectPhoenixSnapshot } = await import('../agent/tools/phoenix.tools.js');
+                const snapshot = await collectPhoenixSnapshot();
+                const d = new Date();
+                const dateKey = `${d.getMonth() + 1}/${d.getDate()}`;
+                const allSpans = snapshot.rootSpans ?? [];
+                const alerts = buildAlertsFromSpans(allSpans);
+                const spans = filterSpans(allSpans);
+                return res.status(200).json({
+                    success: true,
+                    source: 'live',
+                    alerts,
+                    metrics: {
+                        totalTraces: snapshot.totalSpans ?? 0,
+                        latencyP50: `${Math.round((snapshot.p50 ?? 0) * 1000)}ms`,
+                        latencyP99: `${((snapshot.p99 ?? 0)).toFixed(1)}s`,
+                        tracesOverTime: [{ date: dateKey, ok: snapshot.ok ?? 0, error: snapshot.error ?? 0 }],
+                        latencyPercentiles: [{ date: dateKey, p50: snapshot.p50 ?? 0, p90: snapshot.p90 ?? 0, p99: snapshot.p99 ?? 0 }],
+                    },
+                    spans,
+                    total: spans.length,
+                });
+            }
+            catch (liveErr) {
+                console.error('[PhoenixMonitor] Live query failed, falling back to local NeDB storage:', liveErr.message);
+            }
+        }
         // Query the last 24h of stored phoenix snapshots from NeDB
         const dayBack = new Date();
         dayBack.setHours(dayBack.getHours() - 24);
@@ -101,17 +229,17 @@ router.get('/api/:conn/monitoring/phoenix', async function (req, res) {
             // If no stored data yet, fall back to a one-time live fetch
             if (err || !snapshots || snapshots.length === 0) {
                 try {
-                    const { getSlowQueryTraces, collectPhoenixSnapshot } = await import('../agent/tools/phoenix.tools.js');
-                    const [slowData, snapshot] = await Promise.all([
-                        getSlowQueryTraces(500),
-                        collectPhoenixSnapshot()
-                    ]);
+                    const { collectPhoenixSnapshot } = await import('../agent/tools/phoenix.tools.js');
+                    const snapshot = await collectPhoenixSnapshot();
                     const d = new Date();
                     const dateKey = `${d.getMonth() + 1}/${d.getDate()}`;
+                    const allSpans = snapshot.rootSpans ?? [];
+                    const alerts = buildAlertsFromSpans(allSpans);
+                    const spans = filterSpans(allSpans);
                     return res.status(200).json({
                         success: true,
                         source: 'live_fallback',
-                        alerts: slowData,
+                        alerts,
                         metrics: {
                             totalTraces: snapshot.totalSpans ?? 0,
                             latencyP50: `${Math.round((snapshot.p50 ?? 0) * 1000)}ms`,
@@ -119,7 +247,8 @@ router.get('/api/:conn/monitoring/phoenix', async function (req, res) {
                             tracesOverTime: [{ date: dateKey, ok: snapshot.ok ?? 0, error: snapshot.error ?? 0 }],
                             latencyPercentiles: [{ date: dateKey, p50: snapshot.p50 ?? 0, p90: snapshot.p90 ?? 0, p99: snapshot.p99 ?? 0 }],
                         },
-                        spans: snapshot.rootSpans ?? [],
+                        spans,
+                        total: spans.length,
                     });
                 }
                 catch (liveErr) {
@@ -173,13 +302,23 @@ router.get('/api/:conn/monitoring/phoenix', async function (req, res) {
             const allP99 = snapshots.map((s) => s.p99 ?? 0).filter(Boolean);
             const avgP50 = allP50.length ? allP50.reduce((a, b) => a + b, 0) / allP50.length : 0;
             const avgP99 = allP99.length ? allP99.reduce((a, b) => a + b, 0) / allP99.length : 0;
-            // Get slow queries from latest snapshot spans or fallback
-            const { getSlowQueryTraces } = await import('../agent/tools/phoenix.tools.js');
-            const slowData = await getSlowQueryTraces(500);
+            // Generate alerts from stored spans
+            const { collectPhoenixSnapshot } = await import('../agent/tools/phoenix.tools.js');
+            let latestLiveSpans = [];
+            try {
+                const freshSnap = await collectPhoenixSnapshot();
+                latestLiveSpans = freshSnap.rootSpans ?? [];
+            }
+            catch {
+                latestLiveSpans = latest?.rootSpans ?? [];
+            }
+            const alerts = buildAlertsFromSpans(latestLiveSpans);
+            const rawStoredSpans = latestLiveSpans.length ? latestLiveSpans : (latest?.rootSpans ?? []);
+            const spans = filterSpans(rawStoredSpans);
             res.status(200).json({
                 success: true,
                 source: 'stored',
-                alerts: slowData,
+                alerts,
                 metrics: {
                     totalTraces,
                     latencyP50: `${Math.round(avgP50 * 1000)}ms`,
@@ -190,13 +329,51 @@ router.get('/api/:conn/monitoring/phoenix', async function (req, res) {
                     toolSpans,
                     tokenUsage,
                 },
-                spans: latest?.rootSpans ?? [],
+                spans,
+                total: spans.length,
             });
         });
     }
     catch (err) {
         console.error('[Monitoring] Phoenix health check failed:', err);
         res.status(500).json({ success: false, msg: 'Could not fetch Phoenix traces' });
+    }
+});
+// Get detailed spans belonging to a trace
+router.get('/api/:conn/monitoring/trace/:traceId', async function (req, res) {
+    try {
+        const { traceId } = req.params;
+        const projectName = process.env.PHOENIX_PROJECT_NAME || 'vibe-mongo-admin';
+        const { callPhoenixTool } = await import('../agent/tools/phoenix.tools.js');
+        const trace = await callPhoenixTool('get-trace', {
+            project_identifier: projectName,
+            trace_id: traceId,
+            include_annotations: true
+        });
+        if (!trace) {
+            return res.status(404).json({ success: false, msg: 'Trace not found' });
+        }
+        return res.status(200).json({ success: true, trace });
+    }
+    catch (err) {
+        console.error('[Monitoring] Get trace details failed:', err);
+        return res.status(500).json({ success: false, msg: 'Could not fetch trace details', error: err.message });
+    }
+});
+// Run AI Evaluation on a specific trace
+router.post('/api/:conn/monitoring/trace/:traceId/evaluate', async function (req, res) {
+    try {
+        const { traceId } = req.params;
+        const { runAgentEvaluation } = await import('../agent/tools/phoenix.tools.js');
+        const evaluationResult = await runAgentEvaluation(traceId);
+        if (!evaluationResult) {
+            return res.status(500).json({ success: false, msg: 'Evaluation failed to return a result' });
+        }
+        return res.status(200).json({ success: true, data: evaluationResult });
+    }
+    catch (err) {
+        console.error('[Monitoring] AI Evaluation failed:', err);
+        return res.status(500).json({ success: false, msg: 'Could not run AI Evaluation', error: err.message });
     }
 });
 function averageDatapoints(datapoints, limit) {

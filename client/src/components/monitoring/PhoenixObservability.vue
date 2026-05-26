@@ -39,6 +39,7 @@
           <el-icon class="card-chart-icon" style="color: #10b981;"><DataBoard /></el-icon>
           <span>{{ store.t('Spans') }}</span>
           <el-tag size="small" type="info" style="margin-left: 8px;">{{ filteredSpans.length }}</el-tag>
+          <el-tag v-if="filterActive" size="small" type="warning" style="margin-left: 4px;">Filtered</el-tag>
         </div>
         <!-- Search + Filter bar (mimics Phoenix) -->
         <div class="spans-search-bar">
@@ -160,7 +161,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { DataBoard, CircleCheck, CircleClose, Search, Timer, Coin } from '@element-plus/icons-vue';
 import { store } from '../../stores';
 import PhoenixMetricCharts from './PhoenixMetricCharts.vue';
@@ -172,7 +173,7 @@ const props = defineProps({
   showMetrics:{ type: Boolean, default: true },
   showTable:  { type: Boolean, default: true },
 });
-defineEmits(['openSpan']);
+const emit = defineEmits(['openSpan', 'filterChange']);
 
 // Search / filter state
 const searchText   = ref('');
@@ -181,12 +182,89 @@ const filterKind   = ref('');
 const currentPage  = ref(1);
 const pageSize     = ref(20);
 
+// Reset to page 1 on filter changes
+watch([searchText, filterStatus, filterKind], () => {
+  currentPage.value = 1;
+});
+
+// Emit debounced filter changes to trigger backend online search
+let debounceTimer = null;
+watch([searchText, filterStatus, filterKind], () => {
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    emit('filterChange', {
+      search: searchText.value.trim(),
+      status: filterStatus.value,
+      kind: filterKind.value
+    });
+  }, 300);
+});
+
 const filteredSpans = computed(() => {
   return props.spans.filter(s => {
-    const matchText   = !searchText.value || s.name?.toLowerCase().includes(searchText.value.toLowerCase());
-    const matchStatus = !filterStatus.value || (s.statusCode ?? 'OK') === filterStatus.value;
-    const matchKind   = !filterKind.value  || (s.kind ?? 'chain') === filterKind.value;
-    return matchText && matchStatus && matchKind;
+    // 1. Kind filter from dropdown
+    const matchKindDropdown = !filterKind.value || (s.kind ?? 'chain') === filterKind.value;
+    
+    // 2. Status filter from dropdown
+    const matchStatusDropdown = !filterStatus.value || (s.statusCode ?? 'OK') === filterStatus.value;
+    
+    if (!matchKindDropdown || !matchStatusDropdown) return false;
+    
+    if (!searchText.value.trim()) return true;
+    
+    const query = searchText.value.trim();
+    
+    // Check if the query is a key-value comparison expression, e.g., span_kind == 'LLM' or kind == 'llm' or status == 'ERROR' or latency > 100
+    const matchExpr = query.match(/^([a-zA-Z_.]+)\s*(==|!=|>=|<=|>|<|contains)\s*(['"]?)(.*?)\3$/);
+    if (matchExpr) {
+      const [, fieldRaw, op, , valRaw] = matchExpr;
+      const field = fieldRaw.toLowerCase().replace(/_/g, '').replace(/\./g, ''); // normalize names e.g. span_kind -> spankind, status_code -> statuscode, db.name -> dbname
+      const val = valRaw.toLowerCase();
+      
+      // Extract target value from span s
+      let targetVal = '';
+      if (field === 'spankind' || field === 'kind') {
+        targetVal = (s.kind ?? 'chain').toLowerCase();
+      } else if (field === 'statuscode' || field === 'status') {
+        targetVal = (s.statusCode ?? 'OK').toLowerCase();
+      } else if (field === 'name') {
+        targetVal = (s.name ?? '').toLowerCase();
+      } else if (field === 'input') {
+        targetVal = typeof s.input === 'string' ? s.input.toLowerCase() : JSON.stringify(s.input || {}).toLowerCase();
+      } else if (field === 'output') {
+        targetVal = typeof s.output === 'string' ? s.output.toLowerCase() : JSON.stringify(s.output || {}).toLowerCase();
+      } else if (field === 'dbname' || field === 'db') {
+        targetVal = (s.db ?? '').toLowerCase();
+      } else if (field === 'collection') {
+        targetVal = (s.collection ?? '').toLowerCase();
+      } else if (field === 'latency' || field === 'durationms' || field === 'latency_ms') {
+        const targetNum = Number(s.durationMs ?? 0);
+        const valNum = Number(val);
+        if (op === '==') return targetNum === valNum;
+        if (op === '!=') return targetNum !== valNum;
+        if (op === '>') return targetNum > valNum;
+        if (op === '<') return targetNum < valNum;
+        if (op === '>=') return targetNum >= valNum;
+        if (op === '<=') return targetNum <= valNum;
+        return false;
+      } else {
+        targetVal = String(s[fieldRaw] ?? s.attributes?.[fieldRaw] ?? '').toLowerCase();
+      }
+      
+      if (op === '==') return targetVal === val;
+      if (op === '!=') return targetVal !== val;
+      if (op === 'contains') return targetVal.includes(val);
+      return false;
+    }
+    
+    // Default text fallback: match name, kind, status, input, output, or database
+    const searchLower = query.toLowerCase();
+    return (s.name ?? '').toLowerCase().includes(searchLower) ||
+           (s.kind ?? '').toLowerCase().includes(searchLower) ||
+           (s.statusCode ?? '').toLowerCase().includes(searchLower) ||
+           (s.input ?? '').toLowerCase().includes(searchLower) ||
+           (s.output ?? '').toLowerCase().includes(searchLower) ||
+           (s.db ?? '').toLowerCase().includes(searchLower);
   });
 });
 
@@ -194,6 +272,11 @@ const pagedSpans = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
   return filteredSpans.value.slice(start, start + pageSize.value);
 });
+
+// True whenever any filter is active – used to show "Filtered" badge
+const filterActive = computed(() =>
+  !!searchText.value.trim() || !!filterStatus.value || !!filterKind.value
+);
 
 function formatTime(ts) {
   if (!ts) return new Date().toLocaleString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });

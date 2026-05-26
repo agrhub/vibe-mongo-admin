@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const AgentChatService_js_1 = require("../services/AgentChatService.js");
-const MongoService_js_1 = require("../services/MongoService.js");
+const AgentChatService_1 = require("../services/AgentChatService");
+const MongoService_1 = require("../services/MongoService");
 const router = (0, express_1.Router)();
 // ================= AGENT AI CHAT =================
 /**
@@ -17,13 +17,13 @@ router.post('/api/agent/chat', async (req, res) => {
     try {
         // Sync agent's active connection with the UI context
         if (context && context.currentConnection) {
-            const dbConnections = req.app.locals.dbConnections;
+            const dbConnections = MongoService_1.mongoService.getConnections();
             const activeConn = dbConnections ? dbConnections[context.currentConnection] : null;
             if (activeConn && activeConn.client && activeConn.connString) {
-                MongoService_js_1.mongoService.setActiveConnection(activeConn.client, activeConn.connString, context.currentConnection);
+                MongoService_1.mongoService.setActiveConnection(activeConn.client, activeConn.connString, context.currentConnection);
             }
         }
-        const result = await AgentChatService_js_1.agentChatService.chat(userId, message, context);
+        const result = await AgentChatService_1.agentChatService.chat(userId, message, context);
         res.json(result);
     }
     catch (err) {
@@ -37,7 +37,7 @@ router.post('/api/agent/chat', async (req, res) => {
  */
 router.get('/api/agent/history', (req, res) => {
     const { userId = 'admin_user' } = req.query;
-    const history = AgentChatService_js_1.agentChatService.getHistory(userId);
+    const history = AgentChatService_1.agentChatService.getHistory(userId);
     res.json({ history });
 });
 /**
@@ -46,7 +46,7 @@ router.get('/api/agent/history', (req, res) => {
  */
 router.delete('/api/agent/session', (req, res) => {
     const { userId = 'admin_user' } = req.body;
-    AgentChatService_js_1.agentChatService.clearSession(userId);
+    AgentChatService_1.agentChatService.clearSession(userId);
     res.json({ success: true, message: 'Chat session cleared' });
 });
 exports.default = router;

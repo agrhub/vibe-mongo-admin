@@ -24,3 +24,13 @@ server/data/*.*
 server/backups/*.*
 cloud-agent.cmd
 cloud-run.cmd
+scratch-i18n.cjs
+scratch-i18n.js
+scratch-replace.cjs
+scratch-translate.js
+docs/feature_proposals.md
+docs/naming_proposals.md
+docs/video_production_guide.md
+server/scratch-translate.js
+server/dist/scratch_test.js
+server/src/scratch_test.ts

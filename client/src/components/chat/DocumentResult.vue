@@ -71,9 +71,7 @@
       <div v-for="(doc, idx) in documents" :key="idx" class="doc-item">
         <div class="doc-item-header">
           <span class="doc-num">#{{ idx + 1 }}</span>
-          <button class="doc-copy-btn" @click="handleCopyDoc(doc)" :title="store.t('Copy document')">
-            📋
-          </button>
+          <el-button size="small" text circle icon="CopyDocument" @click="handleCopyDoc(doc)" :title="store.t('Copy document')" />
         </div>
         <pre class="doc-pre"><code>{{ JSON.stringify(doc, null, 2) }}</code></pre>
       </div>
@@ -158,7 +156,12 @@ function handleCopyDoc(doc: any) {
 <style scoped>
 .document-result {
   font-size: 12.5px;
-  color: #e2e8f0;
+  /* color: #e2e8f0; */
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 8px;
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -275,8 +278,8 @@ function handleCopyDoc(doc: any) {
   transition: all 0.2s;
 }
 .toggle-btn.active {
-  background: rgba(0, 242, 254, 0.15);
-  color: var(--el-color-primary);
+  background: var(--el-color-primary);
+  color: var(--el-color-white);
   font-weight: 600;
 }
 
@@ -290,20 +293,20 @@ function handleCopyDoc(doc: any) {
 .table-wrapper {
   overflow-x: auto;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
 }
 
 .doc-table {
-  --el-table-border-color: rgba(255, 255, 255, 0.06);
+  /* --el-table-border-color: rgba(255, 255, 255, 0.06);
   --el-table-header-bg-color: rgba(0, 0, 0, 0.2);
   --el-table-row-hover-bg-color: rgba(0, 242, 254, 0.04);
   --el-table-bg-color: transparent;
   --el-table-tr-bg-color: transparent;
-  background: transparent !important;
+  background: transparent !important; */
   font-size: 11.5px;
 }
 
-:deep(.doc-table .el-table__header-wrapper th) {
+/* :deep(.doc-table .el-table__header-wrapper th) {
   background: rgba(0, 0, 0, 0.2) !important;
   color: #94a3b8;
   font-size: 11px;
@@ -312,15 +315,15 @@ function handleCopyDoc(doc: any) {
 
 :deep(.doc-table .el-table__body-wrapper) {
   background: transparent;
-}
+} */
 
 .cell-id {
   font-family: 'Fira Code', monospace;
-  color: #4facfe;
+  color: var(--el-color-primary);
   font-size: 10.5px;
 }
 .cell-val {
-  color: #d1d5db;
+  color: var(--text-primary);
 }
 
 /* List */
@@ -330,11 +333,11 @@ function handleCopyDoc(doc: any) {
   gap: 6px;
 }
 .doc-item {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-secondary);
   padding: 8px 10px;
   border-radius: 5px;
   overflow-x: auto;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
   position: relative;
 }
 

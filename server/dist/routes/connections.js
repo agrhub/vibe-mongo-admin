@@ -33,6 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+const MongoService_1 = require("../services/MongoService");
 const express_1 = require("express");
 const common = __importStar(require("./common"));
 const ConnectionStore_1 = require("../services/ConnectionStore");
@@ -167,7 +168,7 @@ router.post('/api/connections/delete', async function (req, res) {
 });
 // Sidebar tree list
 router.get('/api/:conn/sidebar', function (req, res) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = MongoService_1.mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection name' });
     }

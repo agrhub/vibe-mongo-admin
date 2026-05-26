@@ -1,7 +1,7 @@
 import { Router, Request as ExpressRequest, Response } from 'express';
 type Request = ExpressRequest<any>;
-import { agentChatService } from '@/services/AgentChatService.js';
-import { mongoService } from '@/services/MongoService.js';
+import { agentChatService } from '@/services/AgentChatService';
+import { mongoService } from '@/services/MongoService';
 
 const router = Router();
 
@@ -21,7 +21,7 @@ router.post('/api/agent/chat', async (req: Request, res: Response) => {
     try {
         // Sync agent's active connection with the UI context
         if (context && context.currentConnection) {
-            const dbConnections = req.app.locals.dbConnections;
+            const dbConnections = mongoService.getConnections();
             const activeConn = dbConnections ? dbConnections[context.currentConnection] : null;
             if (activeConn && activeConn.client && activeConn.connString) {
                 mongoService.setActiveConnection(activeConn.client, activeConn.connString, context.currentConnection);

@@ -144,7 +144,7 @@
                           type="primary" 
                           size="small" 
                           :icon="CaretRight" 
-                          round text bg
+                          round text
                           @click="runQueryInChat(chart)"
                         >
                           {{ store.t('Run') }}
@@ -184,6 +184,7 @@ import {
   LegendComponent
 } from 'echarts/components';
 import VChart from 'vue-echarts';
+import { buildChartOption } from '../../utils/chartBuilder';
 
 use([CanvasRenderer, BarChart, PieChart, LineChart, TitleComponent, TooltipComponent, GridComponent, LegendComponent]);
 
@@ -233,7 +234,10 @@ async function fetchAIAnalysis() {
       `/api/${store.activeConnection}/${store.activeDb}/ai-analysis`,
       { customPrompt: customPrompt.value }
     );
-    analysisData.value = res.data.charts || [];
+    analysisData.value = (res.data.charts || []).map((chart: any) => ({
+      ...chart,
+      option: buildChartOption(chart, chart.results || [], chartTheme.value === 'dark')
+    }));
     insightsText.value = res.data.insights || '';
   } catch (e: any) {
     console.error(e);
@@ -373,12 +377,16 @@ async function fetchAIAnalysis() {
 }
 
 .insight-icon {
-  color: #e6a23c;
+  color: var(--el-color-primary);
 }
 
 .insights-content {
   line-height: 1.6;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.insights-content :deep(strong) {
+  color: var(--el-color-primary);
 }
 
 .charts-grid {

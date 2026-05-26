@@ -67,53 +67,13 @@
         </div>
 
         <!-- Bulk Actions Floating Bar -->
-        <transition name="fade">
-          <div v-if="selectedRows.length > 0 && viewMode === 'table'" class="bulk-actions-toolbar">
-            <div class="bulk-info">
-              <el-icon class="bulk-icon"><InfoFilled /></el-icon>
-              <span>
-                {{ store.t('Selected') }} <strong>{{ selectedRows.length }}</strong> {{ store.t('documents') }}
-              </span>
-            </div>
-            <div class="bulk-buttons">
-              <el-button 
-                type="primary" 
-                size="small" 
-                plain round
-                :icon="CopyDocument" 
-                @click="bulkCopy(false)"
-              >
-                {{ store.t('Copy with _id') }}
-              </el-button>
-              <el-button 
-                type="primary" 
-                size="small" 
-                plain round
-                :icon="CopyDocument" 
-                @click="bulkCopy(true)"
-              >
-                {{ store.t('Copy without _id') }}
-              </el-button>
-              <el-button 
-                type="danger" 
-                size="small" 
-                round
-                :icon="Delete" 
-                @click="bulkDelete"
-              >
-                {{ store.t('Bulk Delete') }}
-              </el-button>
-              <el-button 
-                type="info" 
-                size="small" 
-                link round
-                @click="clearSelection"
-              >
-                {{ store.t('Clear') }}
-              </el-button>
-            </div>
-          </div>
-        </transition>
+        <BulkActionsBar
+          v-if="viewMode === 'table'"
+          :selected-rows="selectedRows"
+          @bulk-copy="bulkCopy"
+          @bulk-delete="bulkDelete"
+          @clear-selection="clearSelection"
+        />
 
         <!-- Document card list / Table Grid -->
         <div class="documents-list-box">
@@ -126,90 +86,17 @@
             />
           </div>
 
-          <div v-else-if="viewMode === 'table'" class="table-view-container">
-            <el-table
-              ref="tableRef"
-              :data="filteredDocuments"
-              style="width: 100%"
-              stripe
-              size="small"
-              class="premium-docs-table"
-              :empty-text="store.t('No matching documents found')"
-              @sort-change="handleSortChange"
-              @selection-change="handleSelectionChange"
-            >
-              <!-- Checkbox selection column -->
-              <el-table-column type="selection" width="55" fixed="left" />
-
-              <!-- Dynamic Columns -->
-              <el-table-column
-                v-for="col in tableColumns"
-                :key="col"
-                :prop="col"
-                sortable="custom"
-                min-width="150"
-                show-overflow-tooltip
-              >
-                <template #header>
-                  <div class="column-header-box">
-                    <span class="column-name">{{ col }}</span>
-                    <el-input
-                      v-model="columnFilters[col]"
-                      size="small"
-                      :placeholder="store.t('Type to search...')"
-                      clearable
-                      class="col-search-input"
-                      @click.stop
-                    >
-                      <template #prefix>
-                        <el-icon class="el-input__icon"><Search /></el-icon>
-                      </template>
-                    </el-input>
-                  </div>
-                </template>
-                <template #default="scope">
-                  <span :class="{ 'doc-id-cell-text': col === '_id', 'cell-text-regular': col !== '_id' }">
-                    {{ formatCellValue(scope.row[col]) }}
-                  </span>
-                </template>
-              </el-table-column>
-
-              <!-- Actions column -->
-              <el-table-column :label="store.t('Actions')" width="130" fixed="right">
-                <template #default="scope">
-                  <div class="table-action-btns">
-                    <el-tooltip :content="store.t('Copy (without _id)')" placement="top">
-                      <el-button
-                        type="primary"
-                        link
-                        size="small"
-                        :icon="CopyDocument"
-                        @click="copyDocWithoutId(scope.row)"
-                      />
-                    </el-tooltip>
-                    <el-tooltip :content="store.t('Edit')" placement="top">
-                      <el-button
-                        type="primary"
-                        link
-                        size="small"
-                        :icon="Edit"
-                        @click="$router.push(`/${store.activeConnection}/${store.activeDb}/${store.activeColl}/edit/${formatDocIdRaw(scope.row._id)}`)"
-                      />
-                    </el-tooltip>
-                    <el-tooltip :content="store.t('Delete')" placement="top">
-                      <el-button
-                        type="danger"
-                        link
-                        size="small"
-                        :icon="Delete"
-                        @click="handleDeleteDocTable(scope.row._id)"
-                      />
-                    </el-tooltip>
-                  </div>
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
+          <DocumentTable
+            v-else-if="viewMode === 'table'"
+            ref="docTableRef"
+            :documents="documents"
+            @sort-change="handleSortChange"
+            @selection-change="handleSelectionChange"
+            @filter-change="handleFilterChange"
+            @copy-doc="copyDocWithoutId"
+            @edit-doc="handleEditDoc"
+            @delete-doc="handleDeleteDocTable"
+          />
 
           <!-- Empty state -->
           <div v-if="documents.length === 0" class="empty-docs-box">
@@ -268,19 +155,22 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { store } from '../stores';
 import DocumentCard      from '../components/collection/DocumentCard.vue';
 import QueryConsole      from '../components/collection/QueryConsole.vue';
 import CollectionIndexes from '../components/collection/CollectionIndexes.vue';
 import CollectionSchema  from '../components/collection/CollectionSchema.vue';
 import CollectionAnalysis from '../components/collection/CollectionAnalysis.vue';
-import { Document, Download, Plus, Compass, DocumentDelete, DataAnalysis, CopyDocument, Edit, Delete, Menu, Tickets, Search, InfoFilled } from '@element-plus/icons-vue';
+import DocumentTable     from '../components/collection/DocumentTable.vue';
+import BulkActionsBar    from '../components/collection/BulkActionsBar.vue';
+import { Document, Download, Plus, Compass, DocumentDelete, DataAnalysis, Menu, Tickets } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import axios from 'axios';
 
 const route = useRoute();
+const router = useRouter();
 
 const loading     = ref(false);
 const activeTab   = ref('documents');
@@ -298,15 +188,17 @@ const viewMode      = ref('table');
 const columnFilters = ref({});
 const activeSort    = ref({});
 const selectedRows  = ref([]);
-const tableRef      = ref(null);
+const docTableRef   = ref(null);
 
-// Automatically reset column filters, sort, and selection when active connection/db/collection changes
+// Automatically reset sort and selection when active connection/db/collection changes
 watch(
   () => [route.params.conn, route.params.db, route.params.coll],
   () => {
-    columnFilters.value = {};
     activeSort.value = {};
     selectedRows.value = [];
+    if (docTableRef.value) {
+      docTableRef.value.clearFilters();
+    }
   }
 );
 
@@ -321,65 +213,17 @@ watch(
   { immediate: true }
 );
 
-// Watch for deep changes in columnFilters with a 450ms debounce for online filtering
-let filterTimeout = null;
-watch(
-  () => columnFilters.value,
-  () => {
-    if (filterTimeout) clearTimeout(filterTimeout);
-    filterTimeout = setTimeout(() => {
-      currentPage.value = 1;
-      loadDocuments();
-    }, 450);
-  },
-  { deep: true }
-);
-
-// Get unique keys from the current documents page to build columns dynamically
-const tableColumns = computed(() => {
-  const keys = new Set();
-  documents.value.forEach(doc => {
-    Object.keys(doc).forEach(key => {
-      if (key !== '_id') {
-        keys.add(key);
-      }
-    });
-  });
-  return ['_id', ...Array.from(keys).sort()];
-});
-
-// Format dynamic cell values safely
-const formatCellValue = (val) => {
-  if (val === null || val === undefined) return '';
-  if (typeof val === 'object') {
-    if (val.$oid) return val.$oid;
-    if (val.$date) return val.$date;
-    return JSON.stringify(val);
-  }
-  return String(val);
-};
-
-// Raw ID formatter for Edit/Delete actions
-const formatDocIdRaw = (id) => {
-  if (id === null || id === undefined) return '';
-  if (id.$oid) return id.$oid;
-  if (typeof id === 'object') return id.toString();
-  return id;
-};
-
-// Filtered documents list (handled online on the database side; returns documents directly)
-const filteredDocuments = computed(() => {
-  return documents.value;
-});
-
 const copyDocWithoutId = (doc) => {
   const { _id, ...rest } = doc;
   navigator.clipboard.writeText(JSON.stringify(rest, null, 2));
   ElMessage.success(store.t('Copied without _id — paste into Insert form to duplicate'));
 };
 
-const handleDeleteDocTable = (docId) => {
-  const rawId = formatDocIdRaw(docId);
+const handleEditDoc = (rawId) => {
+  router.push(`/${store.activeConnection}/${store.activeDb}/${store.activeColl}/edit/${rawId}`);
+};
+
+const handleDeleteDocTable = (rawId) => {
   ElMessageBox.confirm(
     store.t('Delete this document? This action cannot be undone.'),
     store.t('Warning'),
@@ -405,13 +249,19 @@ const handleSortChange = ({ prop, order }) => {
   loadDocuments();
 };
 
+const handleFilterChange = (filters) => {
+  columnFilters.value = filters;
+  currentPage.value = 1;
+  loadDocuments();
+};
+
 const handleSelectionChange = (selection) => {
   selectedRows.value = selection;
 };
 
 const clearSelection = () => {
-  if (tableRef.value) {
-    tableRef.value.clearSelection();
+  if (docTableRef.value) {
+    docTableRef.value.clearSelection();
   }
 };
 
@@ -476,6 +326,7 @@ watch(
     currentPage.value = 1;
     queryString.value = '';
     queryError.value  = '';
+    columnFilters.value = {};
     loadDocuments();
   },
   { immediate: true }
@@ -640,7 +491,7 @@ const handleMassDelete = () => {
   margin-top: 2rem;
 }
 
-/* View Mode Toolbar & Premium Table styles */
+/* View Mode Toolbar styles */
 .view-mode-toolbar {
   display: flex;
   justify-content: space-between;
@@ -648,136 +499,4 @@ const handleMassDelete = () => {
   margin-bottom: 1rem;
 }
 
-.table-view-container {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md, 8px);
-  padding: 1px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-  margin-top: 1rem;
-}
-
-.premium-docs-table {
-  --el-table-border-color: var(--border-color);
-  --el-table-header-bg-color: var(--bg-secondary);
-  --el-table-row-hover-bg-color: var(--bg-hover, rgba(64, 158, 255, 0.05));
-  background-color: transparent !important;
-}
-
-:deep(.premium-docs-table .el-table__header-wrapper th) {
-  padding: 8px 0;
-}
-
-:deep(.premium-docs-table .el-table__cell) {
-  border-bottom: 1px solid var(--border-color);
-}
-
-.column-header-box {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 4px 0;
-  width: 100%;
-}
-
-.column-name {
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: var(--text-primary);
-  text-transform: capitalize;
-}
-
-.col-search-input {
-  width: 100%;
-}
-
-:deep(.col-search-input .el-input__wrapper) {
-  padding: 0 8px;
-  background-color: var(--bg-primary) !important;
-  box-shadow: 0 0 0 1px var(--border-color) inset !important;
-}
-
-:deep(.col-search-input .el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px var(--color-brand) inset !important;
-}
-
-.doc-id-cell-text {
-  font-family: monospace;
-  font-weight: 700;
-  color: var(--color-brand, #409eff);
-  background: var(--bg-secondary);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.825rem;
-}
-
-.cell-text-regular {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-family: inherit;
-}
-
-.table-action-btns {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-/* Bulk Actions Floating Bar */
-.bulk-actions-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-left: 4px solid var(--color-brand, #409eff);
-  padding: 12px 20px;
-  border-radius: 8px;
-  margin-bottom: 1.25rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-  animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.bulk-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text-primary);
-  font-size: 0.9rem;
-}
-
-.bulk-icon {
-  color: var(--color-brand, #409eff);
-  font-size: 1.2rem;
-}
-
-.bulk-buttons {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Transitions */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(-12px);
-}
 </style>

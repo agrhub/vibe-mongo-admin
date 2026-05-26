@@ -78,6 +78,107 @@ async function getMcpClient(): Promise<Client | null> {
 }
 
 /**
+ * Helper to parse various response formats returned by the official mongodb-mcp-server.
+ * Handles text-enclosed JSON data blocks inside <untrusted-user-data-*> tags
+ * and retrieves totals or count metadata.
+ */
+function parseMcpResponse(content: any[]): any {
+  if (!Array.isArray(content)) return content;
+
+  let totalCount: number | undefined;
+
+  // 1. Scan for metadata/totals across all text content
+  for (const c of content) {
+    if (c.type === 'text' && c.text) {
+      const foundMatch = c.text.match(/Found (\d+) documents/i);
+      if (foundMatch) {
+        totalCount = parseInt(foundMatch[1], 10);
+      }
+      const resultMatch = c.text.match(/resulted in (\d+) documents/i);
+      if (resultMatch) {
+        totalCount = parseInt(resultMatch[1], 10);
+      }
+    }
+  }
+
+  // 2. Scan and parse actual payload JSON (untrusted block or substring)
+  for (const c of content) {
+    if (c.type === 'text' && c.text) {
+      // Check for XML-wrapped untrusted user data block first
+      const untrustedMatch = c.text.match(/<untrusted-user-data-[^>]*>([\s\S]*?)<\/untrusted-user-data-[^>]*>/);
+      if (untrustedMatch) {
+        try {
+          const parsed = JSON.parse(untrustedMatch[1].trim());
+          if (parsed && typeof parsed === 'object') {
+            if (totalCount !== undefined) {
+              if (Array.isArray(parsed)) {
+                (parsed as any).total = totalCount;
+              } else {
+                parsed.total = parsed.total || totalCount;
+                parsed.count = parsed.count || totalCount;
+              }
+            }
+            return parsed;
+          }
+        } catch (e) {
+          // continue
+        }
+      }
+
+      // Check for standalone JSON array or object
+      const jsonMatch = c.text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0].trim());
+          if (parsed && typeof parsed === 'object') {
+            if (totalCount !== undefined) {
+              if (Array.isArray(parsed)) {
+                (parsed as any).total = totalCount;
+              } else {
+                parsed.total = parsed.total || totalCount;
+                parsed.count = parsed.count || totalCount;
+              }
+            }
+            return parsed;
+          }
+        } catch (e) {
+          // continue
+        }
+      }
+
+      // Check if entire text can be parsed as JSON
+      try {
+        const parsed = JSON.parse(c.text.trim());
+        if (parsed && typeof parsed === 'object') {
+          if (totalCount !== undefined) {
+            if (Array.isArray(parsed)) {
+              (parsed as any).total = totalCount;
+            } else {
+              parsed.total = parsed.total || totalCount;
+              parsed.count = parsed.count || totalCount;
+            }
+          }
+          return parsed;
+        }
+      } catch (e) {
+        // continue
+      }
+    }
+  }
+
+  // 3. Fallback to count metadata if parsed JSON payload is not found
+  if (totalCount !== undefined) {
+    return { count: totalCount, total: totalCount };
+  }
+
+  // 4. Fallback to first text block or raw content
+  const firstText = content.find((c: any) => c.type === 'text')?.text;
+  if (firstText !== undefined) return firstText;
+
+  return content;
+}
+
+/**
  * Generic JSON-RPC tool caller forwarding requests to the running mongodb-mcp-server subprocess.
  */
 async function callMcpTool(toolName: string, args: any) {
@@ -101,12 +202,7 @@ async function callMcpTool(toolName: string, args: any) {
       throw new Error(errorMsg);
     }
 
-    const text = content.find((c: any) => c.type === 'text')?.text || '{}';
-    try {
-      return JSON.parse(text);
-    } catch {
-      return text;
-    }
+    return parseMcpResponse(content);
   } catch (err: any) {
     console.error(`[Agent Tool] MCP execution failed for ${toolName}:`, err.message);
     throw err;
@@ -305,7 +401,7 @@ export async function countDocuments({
     const mcpRes = await callMcpTool('count', {
       database: db,
       collection,
-      filter: parsedFilter
+      query: parsedFilter
     });
 
     if (mcpRes) {
@@ -336,10 +432,10 @@ export async function insertOneDocument({
   console.log(`[Agent Tool] Inserting document in: ${db}.${collection}`);
   try {
     const parsedDoc = JSON.parse(document);
-    const mcpRes = await callMcpTool('insert-one', {
+    const mcpRes = await callMcpTool('insert-many', {
       database: db,
       collection,
-      document: parsedDoc
+      documents: [parsedDoc]
     });
 
     if (mcpRes) {
@@ -381,7 +477,7 @@ export async function updateOneDocument({
     const parsedFilter = JSON.parse(filter);
     const parsedUpdate = JSON.parse(update);
 
-    const mcpRes = await callMcpTool('update-one', {
+    const mcpRes = await callMcpTool('update-many', {
       database: db,
       collection,
       filter: parsedFilter,
@@ -425,7 +521,7 @@ export async function deleteOneDocument({
   console.log(`[Agent Tool] Deleting document in: ${db}.${collection} (Filter: ${filter})`);
   try {
     const parsedFilter = JSON.parse(filter);
-    const mcpRes = await callMcpTool('delete-one', {
+    const mcpRes = await callMcpTool('delete-many', {
       database: db,
       collection,
       filter: parsedFilter
@@ -557,10 +653,11 @@ export async function deleteIndex({
 }) {
   console.log(`[Agent Tool] Deleting index: ${indexName} from: ${db}.${collection}`);
   try {
-    const mcpRes = await callMcpTool('delete-index', {
+    const mcpRes = await callMcpTool('drop-index', {
       database: db,
       collection,
-      indexName
+      indexName,
+      type: 'classic'
     });
 
     if (mcpRes) {

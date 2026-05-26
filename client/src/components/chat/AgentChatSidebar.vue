@@ -25,17 +25,15 @@
           </div>
           <div class="header-actions">
             <el-button 
-              type="danger" 
-              size="small" 
-              circle 
+              type="danger"
+              circle text bg
               icon="RefreshLeft" 
               :title="store.t('Clear Chat Logs')"
               @click="handleClearChat" 
             />
             <el-button 
-              type="primary" 
-              size="small" 
-              circle 
+              type="primary"
+              circle text bg
               icon="Close" 
               :title="store.t('Close')"
               @click="toggleSidebar" 
@@ -69,7 +67,19 @@
           >
             <div class="bubble-avatar">{{ msg.role === 'user' ? '👤' : '🤖' }}</div>
             <div class="bubble-body">
-              <div class="bubble-text" v-html="renderMarkdown(msg.content)"></div>
+              <div class="bubble-text-wrapper" style="position: relative; display: flex; align-items: flex-start; gap: 8px;">
+                <div class="bubble-text" style="flex: 1;" v-html="renderMarkdown(msg.content)"></div>
+                <el-button 
+                  v-if="msg.role === 'assistant'"
+                  circle 
+                  size="small" 
+                  icon="Headset"
+                  class="speech-tts-btn"
+                  style="opacity: 0.6; flex-shrink: 0; background: transparent; border: none; padding: 4px;"
+                  :title="store.t('Speak text')"
+                  @click="speakText(msg.content)"
+                />
+              </div>
               
               <!-- Dynamic ECharts Container if aggregate visual returned -->
               <div v-if="msg.chartVisual" class="msg-chart-item-container">
@@ -138,7 +148,7 @@
                         type="primary" 
                         size="small" 
                         icon="CaretRight" 
-                        round text bg style="margin-left: 0px;"
+                        round text style="margin-left: 0px;"
                         @click.stop="handleRunProposedQuery(msg.mongoQuery)"
                       >
                         {{ store.t('Run') }}
@@ -263,6 +273,21 @@ import axios from 'axios';
 import * as echarts from 'echarts';
 import { marked } from 'marked';
 import DocumentResult from './DocumentResult.vue';
+import { buildChartOption } from '../../utils/chartBuilder';
+
+const localeVoiceMap: Record<string, string> = {
+  'vn': 'vi-VN',
+  'vi': 'vi-VN',
+  'en': 'en-US',
+  'es': 'es-ES',
+  'de': 'de-DE',
+  'ru': 'ru-RU',
+  'fa': 'fa-IR',
+  'fr': 'fr-FR',
+  'ja': 'ja-JP',
+  'zh': 'zh-CN',
+  'ko': 'ko-KR'
+};
 
 // Customize marked renderer for code blocks
 const renderer = new marked.Renderer();
@@ -567,20 +592,20 @@ const updateWelcomeSuggestions = () => {
   } else if (route.name === 'Monitoring') {
     suggestions.push(
       store.t('Run DB-Guardian Performance Diagnostic'),
-      store.t('Show server status and uptime'),
-      store.t('Explain resident vs virtual memory')
+      store.t('Evaluate recent slow trace with AI Judge'),
+      store.t('Check security status of active connection')
     );
   } else if ((route.name === 'DatabaseDashboard' || route.name === 'DatabaseCollections') && db) {
     suggestions.push(
       store.t('Run DB-Guardian Performance Diagnostic'),
-      `${store.t('List collections in database')} ${db}`,
-      `${store.t('Show database stats for')} ${db}`
+      store.t('Check security status of active connection'),
+      `${store.t('List collections in database')} ${db}`
     );
   } else if (route.name === 'CollectionView' && db && coll) {
     suggestions.push(
       store.t('Run DB-Guardian Performance Diagnostic'),
-      `${store.t('Query first 5 documents in')} ${coll}`,
-      `${store.t('List indexes created on')} ${coll}`
+      store.t('Evaluate recent slow trace with AI Judge'),
+      `${store.t('Query first 5 documents in')} ${coll}`
     );
   } else if ((route.name === 'DocumentInsert' || route.name === 'DocumentEdit') && db && coll) {
     suggestions.push(
@@ -591,8 +616,8 @@ const updateWelcomeSuggestions = () => {
   } else if (conn) {
     suggestions.push(
       store.t('Run DB-Guardian Performance Diagnostic'),
-      store.t('List databases in this connection'),
-      store.t('Show server status & uptime')
+      store.t('Evaluate recent slow trace with AI Judge'),
+      store.t('List databases in this connection')
     );
   }
 
@@ -673,7 +698,11 @@ const toggleVoiceListening = () => {
   }
 
   const recognition = new SpeechRecognition();
-  recognition.lang = 'en-US'; // Defaults to English voice inputs
+  
+  // Dynamically detect and set microphone recognition language based on active locale
+  const userLocale = (store.activeLocale || 'en').toLowerCase();
+  recognition.lang = localeVoiceMap[userLocale] || userLocale;
+  
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
 
@@ -765,7 +794,7 @@ const sendChat = async (userText: string, skipAppendUser = false) => {
     }
 
     // 2. Process automatic page routing if triggered by agent
-    if (navTrigger) {
+    if (navTrigger && route.name !== 'Monitoring') {
       const connName = store.activeConnection;
       if (connName) {
         if (navTrigger.db && navTrigger.collection) {
@@ -945,73 +974,16 @@ const renderBubbleChart = (bubbleIndex: number, chartSpec: any) => {
   }
 
   // Case 2: Legacy agent format { type, data, xAxis (string), series (string[]) }
-  const chartType = (chartSpec.type || 'bar') as string;
-  const isPie = chartType === 'pie' || chartType === 'donut';
-  const isRadar = chartType === 'radar';
-  const isCartesian = !isPie && !isRadar;
+  const chartType = (chartSpec.type || 'bar').replace('-stacked', '') as string;
+  const spec = {
+    title: chartSpec.title || '',
+    chartType: chartType,
+    labelField: chartSpec.xAxis,
+    valueField: Array.isArray(chartSpec.series) ? chartSpec.series[0] : chartSpec.series
+  };
 
-  if (isPie) {
-    const xField = chartSpec.xAxis;
-    const vField = chartSpec.series?.[0];
-    const pieData = (chartSpec.data || []).map((item: any, i: number) => ({
-      name: String(item[xField] ?? Object.values(item)[0]),
-      value: item[vField] ?? Object.values(item)[1],
-      itemStyle: { color: SERIES_COLORS[i % SERIES_COLORS.length] }
-    }));
-
-    myChart.setOption(applyDarkTheme({
-      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-      series: [{
-        type: 'pie',
-        radius: chartType === 'donut' ? ['40%', '70%'] : '65%',
-        data: pieData,
-        label: { color: '#bbb' }
-      }]
-    }));
-    return;
-  }
-
-  if (isCartesian) {
-    const baseType = chartType.replace('-stacked', '');
-    const stacked = chartType.endsWith('-stacked');
-    const categories = (chartSpec.data || []).map((item: any) => String(item[chartSpec.xAxis] ?? ''));
-    const seriesKeys: string[] = Array.isArray(chartSpec.series) ? chartSpec.series : [];
-
-    const seriesData = seriesKeys.map((sKey: string, i: number) => ({
-      name: sKey,
-      type: baseType || 'bar',
-      stack: stacked ? 'total' : undefined,
-      smooth: baseType === 'line',
-      data: (chartSpec.data || []).map((item: any) => item[sKey]),
-      itemStyle: {
-        color: SERIES_COLORS[i % SERIES_COLORS.length],
-        borderRadius: baseType === 'bar' ? [3, 3, 0, 0] : undefined
-      }
-    }));
-
-    myChart.setOption(applyDarkTheme({
-      tooltip: { trigger: 'axis' },
-      xAxis: { type: 'category', data: categories },
-      yAxis: { type: 'value' },
-      series: seriesData
-    }));
-    return;
-  }
-
-  // Radar chart
-  if (isRadar) {
-    const seriesKeys: string[] = Array.isArray(chartSpec.series) ? chartSpec.series : [];
-    const indicators = seriesKeys.map((k: string) => ({ name: k }));
-    const values = (chartSpec.data || []).map((item: any) => ({
-      name: item[chartSpec.xAxis],
-      value: seriesKeys.map((k: string) => item[k])
-    }));
-    myChart.setOption(applyDarkTheme({
-      tooltip: {},
-      radar: { indicator: indicators },
-      series: [{ type: 'radar', data: values }]
-    }));
-  }
+  const option = buildChartOption(spec, chartSpec.data || [], true);
+  myChart.setOption(applyDarkTheme(option));
 };
 
 
@@ -1047,6 +1019,32 @@ onMounted(() => {
     }
   });
 });
+
+// ---- Text-to-Speech (TTS) ----
+
+function speakText(text: string) {
+  if (!text) return;
+  // Clean markdown syntax, navigation tags, query tags, and html tags to make it sound natural
+  const cleanText = text
+    .replace(/\[NAVIGATION\][\s\S]*?\[\/NAVIGATION\]/gi, '')
+    .replace(/\[QUERY\][\s\S]*?\[\/QUERY\]/gi, '')
+    .replace(/<[^>]*>/g, '') // remove HTML tags
+    .replace(/[*#`_\-]/g, '') // remove markdown symbols
+    .trim();
+  
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel(); // cancel current speech
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    
+    // Dynamically match voice language based on user's active locale
+    const userLocale = (store.activeLocale || 'en').toLowerCase();
+    utterance.lang = localeVoiceMap[userLocale] || userLocale;
+    
+    window.speechSynthesis.speak(utterance);
+  } else {
+    ElMessage.warning(store.t('Speech synthesis is not supported in this browser.'));
+  }
+}
 </script>
 
 <style scoped lang="scss">
@@ -1055,10 +1053,11 @@ onMounted(() => {
   flex-direction: column;
   transition: width 0.3s ease;
   width: 0;
+  z-index: 9999;
   
   &.is-open {
     width: 400px;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 1px solid var(--border-color);
     background-color: var(--bg-secondary);
   }
 }
@@ -1085,7 +1084,7 @@ onMounted(() => {
   font-size: 24px;
   cursor: pointer;
   box-shadow: 0 4px 20px rgba(0, 242, 254, 0.4);
-  z-index: 2000;
+  // z-index: 9999;
   transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   
   &:hover {
@@ -1183,14 +1182,14 @@ onMounted(() => {
     border-radius: 6px;
     padding: 8px;
     font-size: 12px;
-    color: #00f2fe;
+    color: var(--el-color-primary);
     cursor: pointer;
     transition: all 0.2s;
     text-align: left;
     
     &:hover {
-      background-color: rgba(0, 242, 254, 0.1);
-      border-color: rgba(0, 242, 254, 0.3);
+      background-color: var(--el-color-primary-light-9);
+      border-color: var(--el-color-primary-light-5);
     }
   }
 }
@@ -1241,8 +1240,8 @@ onMounted(() => {
     flex-direction: row-reverse;
     
     .bubble-text {
-      background-color: #3b82f6;
-      color: #fff;
+      background-color: var(--el-color-primary);
+      color: var(--el-color-white);
       border-top-right-radius: 2px;
     }
   }
@@ -1251,9 +1250,9 @@ onMounted(() => {
     align-self: flex-start;
     
     .bubble-text {
-      background-color: rgba(18, 20, 32, 0.7);
-      border: 1px solid rgba(0, 242, 254, 0.2);
-      color: #e5e7eb;
+      background-color: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
       border-top-left-radius: 2px;
     }
   }
@@ -1262,9 +1261,9 @@ onMounted(() => {
 .msg-chart-container {
   width: 280px;
   height: 180px;
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: var(--bg-primary);
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
   padding: 5px;
 }
 
@@ -1294,21 +1293,21 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  background-color: rgba(18, 20, 32, 0.7);
-  border: 1px solid rgba(0, 242, 254, 0.2);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
   padding: 8px 16px;
   border-radius: 12px;
   border-top-left-radius: 2px;
-  box-shadow: 0 0 15px rgba(0, 242, 254, 0.1);
+  box-shadow: 0 0 15px var(--border-color);
 }
 
 .thinking-pulse {
   width: 8px;
   height: 8px;
-  background-color: #00f2fe;
+  background-color: var(--color-brand);
   border-radius: 50%;
   position: relative;
-  box-shadow: 0 0 10px #00f2fe;
+  box-shadow: 0 0 10px var(--color-brand);
   animation: thinking-glow 1.5s infinite alternate ease-in-out;
 
   &::before {
@@ -1327,7 +1326,7 @@ onMounted(() => {
 
 .thinking-text {
   font-size: 11.5px;
-  color: #94a3b8;
+  color: var(--text-primary);
   font-style: italic;
   font-weight: 500;
 }
@@ -1344,7 +1343,8 @@ onMounted(() => {
 
 .input-panel-row {
   padding: 15px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
   position: relative;
 }
 
@@ -1414,7 +1414,8 @@ onMounted(() => {
   overflow-y: hidden;
   padding: 8px 16px;
   gap: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
   flex-shrink: 0;
   scrollbar-width: none;
 }
@@ -1489,9 +1490,9 @@ onMounted(() => {
 .bubble-text :deep(code) {
   font-family: 'Fira Code', 'Courier New', Courier, monospace;
   font-size: 11.5px;
-  color: #00f2fe;
+  color: var(--el-color-primary);
   padding: 2px 4px;
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--bg-secondary);
   border-radius: 4px;
 }
 .bubble-text :deep(pre code) {
@@ -1552,13 +1553,13 @@ onMounted(() => {
 .coll-list-buttons {
   margin-top: 10px;
   padding: 8px;
-  background-color: rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(255, 255, 255, 0.1);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
 }
 .db-header-label {
   font-size: 11.5px;
-  color: #9ca3af;
+  color: var(--text-primary);
   margin-bottom: 6px;
   padding-left: 6px;
 }
@@ -1641,8 +1642,8 @@ onMounted(() => {
 }
 
 .chart-query-inspector {
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(0, 242, 254, 0.15);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -1707,7 +1708,8 @@ onMounted(() => {
 }
 
 .inspector-body {
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
   padding: 6px 10px;
   max-height: 120px;
   overflow-y: auto;

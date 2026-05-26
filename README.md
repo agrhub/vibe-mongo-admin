@@ -1,8 +1,7 @@
 # VibeMongo Admin — Documentation
+![Connection Dashboard](docs/images/dashboard.png)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fcamtruong512%2Fvibe-mongo-admin&env=PASSWORD,ENCRYPTION_KEY,AGENT_MODEL,GOOGLE_CLOUD_PROJECT,GOOGLE_CLOUD_LOCATION,GOOGLE_GENAI_USE_VERTEXAI)
-
-> A modern MongoDB administration dashboard powered by **Vue 3**, **Express**, **Google ADK (Agent Development Kit)**, the **MongoDB MCP Server**, and the **ArizeAI Phoenix MCP** for agent monitoring.
+> A modern, AI-first MongoDB administration dashboard powered by a triad of cutting-edge technologies: **Google Cloud Agent (ADK & Gemini)**, the **MongoDB MCP Server**, and **Arize Phoenix Cloud & MCP** for autonomous monitoring and LLM evaluation.
 
 ---
 
@@ -20,17 +19,19 @@
 
 ---
 
-## 🚀 Why VibeMongo? (Unique Advantages)
+## 🚀 Why VibeMongo? (The Autonomous DB SRE)
 
-While traditional tools like MongoDB Compass offer solid administration, **VibeMongo** rethinks the database management experience by integrating generative AI deeply into the workflow:
+While traditional tools like MongoDB Compass offer solid administration, **VibeMongo** rethinks the database management experience by integrating generative AI and real-time observability deeply into the workflow:
 
 1. **DB-Guardian Copilot (AI-Driven SRE)**
-   - VibeMongo doesn't just show you data; it actively monitors query performance.
-   - Using the **Arize Phoenix MCP**, the built-in AI agent detects slow queries (`COLLSCAN`), explains execution plans, and automatically suggests and applies index optimizations to turn them into efficient `IXSCAN` operations.
-2. **Context-Aware AI Chat Sidebar**
+   - VibeMongo actively monitors query performance in real-time.
+   - Using the **Arize Phoenix MCP**, it captures trace data and flags slow queries. The built-in AI agent (Google ADK) can then analyze the trace waterfall and suggest optimizations to turn slow `COLLSCAN` operations into efficient `IXSCAN` operations.
+2. **AI Judge Evaluate (LLM-as-a-judge)**
+   - Click "AI Judge Evaluate" on any trace span to instantly open the Chatbot. The Gemini Agent analyzes the raw input and output, scores its safety and optimality, and provides a human-readable explanation of what the database command actually did.
+3. **Context-Aware AI Chat Sidebar**
    - Forget writing complex aggregation pipelines manually. Just ask the agent: *"Show me the top 5 products by revenue grouped by category in a pie chart."* 
-   - The agent securely translates natural language to MongoDB aggregations and instantly visualizes the result using ECharts—right in your browser.
-3. **One-Click Index Optimization**
+   - The agent securely translates natural language to MongoDB aggregations via the **MongoDB MCP** and instantly visualizes the result using ECharts—right in your browser.
+4. **One-Click Index Optimization**
    - Every collection view features an "**Optimize Index**" magic button that instantly triggers the AI to evaluate your current schema, query usage, and indexes to suggest performance enhancements.
 4. **"Vibe" Aesthetics (Minimalist & Modern)**
    - Built on Vue 3 and Vite, it drops the clunky Java-like interfaces of legacy tools in favor of a sleek, glassmorphic, responsive, dark-mode native dashboard. 

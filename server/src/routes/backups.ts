@@ -1,3 +1,4 @@
+import { mongoService } from '../services/MongoService';
 import { Router, Request as ExpressRequest, Response } from 'express';
 type Request = ExpressRequest<any>;
 import path from 'path';
@@ -17,7 +18,7 @@ const upload = multer({ dest: backupPath });
 
 // Download a backup
 router.get('/api/:conn/backup/:filename/download', function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection' });
     }
@@ -37,7 +38,7 @@ router.get('/api/:conn/backup/:filename/download', function (req: Request, res: 
 
 // Delete a backup
 router.delete('/api/:conn/backup/:filename', function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection' });
     }
@@ -63,7 +64,7 @@ router.delete('/api/:conn/backup/:filename', function (req: Request, res: Respon
 
 // Upload a backup
 router.post('/api/:conn/backup/upload', upload.single('backupFile'), async function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
     if (!connection_list || !connection_list[req.params.conn]) {
         if (req.file) fs.unlinkSync(req.file.path);
         return res.status(400).json({ 'msg': 'Invalid connection' });
@@ -122,7 +123,7 @@ router.post('/api/:conn/backup/upload', upload.single('backupFile'), async funct
 
 // Backup a database
 router.post('/api/:conn/:db/backup', async function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
 
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection' });
@@ -187,7 +188,7 @@ router.post('/api/:conn/:db/backup', async function (req: Request, res: Response
 
 // Restore a database
 router.post('/api/:conn/:db/restore', async function (req: Request, res: Response) {
-    var connection_list = req.app.locals.dbConnections;
+    const connection_list = mongoService.getConnections();
 
     if (!connection_list || !connection_list[req.params.conn]) {
         return res.status(400).json({ 'msg': 'Invalid connection' });

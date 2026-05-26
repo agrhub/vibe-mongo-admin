@@ -13,59 +13,58 @@
 * Overlay a big red "X" or a frustrated emoji.
 
 **Audio (Voiceover):**
-> "Managing MongoDB databases usually means wrestling with complex, syntax-heavy aggregation pipelines just to get simple answers. For developers who aren't database experts, writing these queries to find something like 'the average age of users' is a massive time sink. What if managing your database felt as effortless as chatting with a colleague?"
+> "Managing MongoDB databases usually means wrestling with complex, syntax-heavy aggregation pipelines just to get simple answers. For developers who aren't database experts, this is a massive time sink. Furthermore, monitoring database performance requires jumping into completely separate, disconnected APM tools. What if managing and monitoring your database felt as effortless as chatting with a colleague?"
 
 ## 2. The Solution: VibeMongo Admin (0:30 - 0:50)
 **Visual:** 
 * Fast transition to the slick, modern VibeMongo Admin login screen.
 * Cut to the main dashboard showing the glassmorphic UI, smooth animations, and dark/light mode toggle.
+* Show the logos of the partners: Google Cloud Agent (ADK), Arize Phoenix, and MongoDB.
 
 **Audio (Voiceover):**
-> "Meet **VibeMongo Admin**. We built a modern, web-based MongoDB administration dashboard powered by Vue 3 and Express. It gives you the full, robust features of a traditional database client, but supercharged with the power of generative AI and Google's Agent Development Kit."
+> "Meet **VibeMongo Admin**. It’s a modern, web-based MongoDB administration dashboard that gives you the full, robust features of a traditional database client, but supercharged with a triad of powerful AI technologies: The Google Agent Development Kit, the MongoDB MCP, and the Arize Phoenix MCP."
 
-## 3. Core Demo & The AI Agent (0:50 - 1:50)
+## 3. Core Demo & The AI Agent (0:50 - 1:40)
 **Visual:**
-* Briefly click through standard features: viewing collections, editing a JSON document, and checking indexes. (Speed this up).
-* **Focus Shift:** Open the AI Chat Sidebar on the right side of the screen.
+* Open the AI Chat Sidebar on the right side of the screen.
 * **Action:** Type a prompt like: *"Show me the top 5 users by age"* or *"Visualize the distribution of our users by country."*
-* Show the "Thinking" indicator.
 * Show the AI returning a beautiful, interactive ECharts graph right inside the chat, along with clickable navigation buttons (e.g., `📁 users`).
-* Click one of the generated database/collection pill buttons to show how it instantly navigates the dashboard to that collection.
+* Click one of the generated database/collection pill buttons to show how it instantly navigates the dashboard.
 
 **Audio (Voiceover):**
-> "While VibeMongo gives you 100% functional parity for document editing and backups, the killer feature is our built-in AI Database Administrator. You don't need to write queries anymore. Just ask.
+> "The killer feature is our built-in AI Database Administrator. You don't need to write queries anymore. Just ask.
 > 
-> Watch what happens when I ask to visualize our user data. The agent securely queries the active database, parses the results, and dynamically renders an interactive ECharts visual—right inside the chat! It even generates smart, clickable navigation buttons that route my dashboard instantly. It’s a completely contextual, conversational database experience."
+> Watch what happens when I ask to visualize our user data. Our Google Cloud Agent, powered by Gemini 3.1, securely queries the active database using the MongoDB MCP Server. It parses the results and dynamically renders an interactive ECharts visual—right inside the chat! It’s a completely contextual, conversational database experience."
 
-## 4. Under the Hood: Architecture & MCP (1:50 - 2:30)
+## 4. DB-Guardian & AI Judge (1:40 - 2:30)
 **Visual:**
-* Display a clean, animated Architecture Diagram.
-* Show icons for: **Vue 3** ↔ **Node.js/Express** ↔ **Google ADK (Gemini)** ↔ **MongoDB MCP Server**.
-* Briefly flash a second icon for **ArizeAI Phoenix MCP**.
-* Flash a quick code snippet showing the dynamic `StdioClientTransport` spawning the `mongodb-mcp-server` with `npx`.
+* Switch to the **Phoenix Observability** dashboard view.
+* Show a red **Phoenix DB-Guardian Alert** banner indicating a slow query (`COLLSCAN`).
+* Click on **"Ask AI to Optimize"**. The Chatbot opens and the Agent explains the missing index.
+* Open a trace in the TraceDetailDrawer. Click the **"AI Judge Evaluate"** button. The Chatbot opens, explaining step-by-step the input/output and labeling it as "SAFE" or "SUBOPTIMAL".
 
 **Audio (Voiceover):**
-> "How does this work securely? Our AI core is built on the **Google Agent Development Kit (ADK)**, powered by the highly capable Gemini 3.1 model. 
+> "But we didn't stop at queries. VibeMongo introduces **DB-Guardian**, an autonomous Site Reliability Engineer. 
 > 
-> To bridge the AI securely to live databases, we integrated the official **MongoDB MCP Server** using the Model Context Protocol. When the agent decides to act, our backend dynamically spawns the MCP server via standard I/O, injecting the decrypted connection string on the fly. 
+> By integrating the Arize Phoenix MCP, we capture real-time telemetry. When a slow query hits, DB-Guardian alerts you immediately. With one click on 'Ask AI to Optimize', the Google Agent analyzes the trace waterfall and suggests exact index optimizations. 
 > 
-> And to ensure we have full observability over our agent's tool calls and reasoning traces, we integrated the **ArizeAI Phoenix MCP** for real-time monitoring."
+> Need to audit a suspicious query? Click 'AI Judge Evaluate'. The Agent acts as an LLM Judge, analyzing the raw trace input and output, explaining the operation step-by-step in human-readable language, and scoring its safety."
 
-## 5. Conclusion & What's Next (2:30 - 3:00)
+## 5. Under the Hood & Conclusion (2:30 - 3:00)
 **Visual:**
-* A fast-paced montage: showing schema analysis in the chat, inserting a document, and toggling internationalization (i18n) languages.
+* Display a clean, animated Architecture Diagram showing: **UI/UX** ↔ **Express + Google ADK (Gemini)** ↔ **MongoDB MCP & Phoenix MCP**.
 * Fade to the project logo, GitHub link, and Hackathon details.
 
 **Audio (Voiceover):**
-> "VibeMongo Admin proves that pairing Google ADK with standardized protocols like MCP can dramatically accelerate AI agent development while keeping data secure.
+> "How does this work? The Google ADK acts as the brain. The MongoDB MCP provides the muscle to execute commands securely. And Arize Phoenix Cloud provides the nervous system for real-time observability. 
 > 
-> Next up, we plan to add proactive index optimization and agentic mock-data generation. 
+> VibeMongo Admin proves that pairing Google ADK with standardized protocols like MCP can dramatically accelerate autonomous agent development while keeping data secure.
 > 
-> Stop writing boilerplate pipelines. Start talking to your database. Check out VibeMongo Admin today on GitHub. Thanks for watching!"
+> Stop writing boilerplate pipelines and flying blind on performance. Check out VibeMongo Admin today. Thanks for watching!"
 
 ---
 
 ## 💡 Filming Tips for the User:
 1. **Resolution:** Record your screen in at least 1080p.
-2. **Zoom In:** When typing in the AI chat sidebar, zoom in slightly during post-production so the judges can clearly read your prompts and see the structured JSON blocks turning into beautiful Vue components.
-3. **Pacing:** If your MongoDB queries take a few seconds to run, speed up that specific part of the video by 1.5x - 2x to keep the video within the 3-minute limit.
+2. **Zoom In:** When typing in the AI chat sidebar or reading the AI Judge's evaluation, zoom in slightly during post-production so the judges can clearly read the structured explanations.
+3. **Pacing:** If your MongoDB queries take a few seconds to run, speed up that specific part of the video by 1.5x - 2x to keep the video exactly around the 3:00 mark (+/- 10s).

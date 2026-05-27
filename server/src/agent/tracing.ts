@@ -12,6 +12,21 @@
  *    Set PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces
  *    Set PHOENIX_PROJECT_NAME=vibe-mongo-admin
  */
+import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
+
+// Programmatically load .env from the parent directory if it exists, otherwise fallback safely
+const parentEnvPath = path.resolve(process.cwd(), '../.env');
+const localEnvPath = path.resolve(process.cwd(), '.env');
+if (fs.existsSync(parentEnvPath)) {
+  dotenv.config({ path: parentEnvPath });
+} else if (fs.existsSync(localEnvPath)) {
+  dotenv.config({ path: localEnvPath });
+} else {
+  dotenv.config(); // silently fallback
+}
+
 import { register, traceChain, withSpan } from '@arizeai/phoenix-otel';
 import { registerInstrumentations } from '@opentelemetry/instrumentation';
 import { MongoDBInstrumentation } from '@opentelemetry/instrumentation-mongodb';
@@ -102,6 +117,12 @@ export function traceMongoApiMiddleware(req: any, res: any, next: any) {
   const { withSpan, trace } = require('@arizeai/phoenix-otel');
   const url: string = req.originalUrl || req.url || '';
   const method: string = req.method || 'GET';
+  
+  // EXCLUDE monitoring, telemetry, backup, and restore routes to prevent massive recursive feedback loop and OOM!
+  if (url.includes('/monitoring') || url.includes('/phoenix') || url.includes('/backup') || url.includes('/restore')) {
+    return next();
+  }
+
   const spanName = `${method} ${url.split('?')[0]}`;
 
   withSpan(

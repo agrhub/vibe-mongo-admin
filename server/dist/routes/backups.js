@@ -12,7 +12,7 @@ const mongodb_1 = require("mongodb");
 const ejson = mongodb_1.BSON.EJSON;
 const router = (0, express_1.Router)();
 // Storage setup for backup uploads
-const backupPath = path_1.default.join(__dirname, '../../backups');
+const backupPath = path_1.default.join(__dirname, '../../data/backups');
 if (!fs_1.default.existsSync(backupPath)) {
     fs_1.default.mkdirSync(backupPath, { recursive: true });
 }
@@ -80,8 +80,7 @@ router.post('/api/:conn/backup/upload', upload.single('backupFile'), async funct
         fs_1.default.unlinkSync(req.file.path);
         return res.status(400).json({ 'msg': 'Only .zip backup files are allowed' });
     }
-    const isProd = process.env.NODE_ENV === 'production';
-    var targetPath = path_1.default.join(backupPath, originalName + (isProd ? '?nolock=1' : ''));
+    var targetPath = path_1.default.join(backupPath, originalName);
     const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
     let success = false;
     let lastError = null;
@@ -127,27 +126,56 @@ router.post('/api/:conn/:db/backup', async function (req, res) {
     }
     var db_name = req.params.db;
     var conn = connection_list[req.params.conn];
+    const os = require('os');
+    const tmpDir = path_1.default.join(os.tmpdir(), 'vibemongo_tmp_' + Date.now());
+    const localZipFilePath = path_1.default.join(os.tmpdir(), db_name + '_backup_' + Date.now() + '.zip');
     try {
         var mongo_db = conn.client.db(db_name);
         var collections = await mongo_db.listCollections().toArray();
         var keepObjectId = req.body.keepObjectId !== false;
-        var AdmZip = require('adm-zip');
-        var zip = new AdmZip();
-        // Read all collections
+        // Create temporary directory
+        fs_1.default.mkdirSync(tmpDir, { recursive: true });
+        // Stream each collection directly to its JSON file
         for (var col of collections) {
             if (col.type === 'view')
                 continue; // Skip views
-            var docs = await mongo_db.collection(col.name).find({}).toArray();
-            if (!keepObjectId) {
-                docs = docs.map(function (doc) {
+            const colFilePath = path_1.default.join(tmpDir, col.name + '.json');
+            const writeStream = fs_1.default.createWriteStream(colFilePath, { encoding: 'utf8' });
+            // Write opening bracket
+            writeStream.write('[\n');
+            const cursor = mongo_db.collection(col.name).find({});
+            let isFirst = true;
+            for await (const doc of cursor) {
+                if (!keepObjectId) {
                     if (doc._id) {
                         delete doc._id;
                     }
-                    return doc;
-                });
+                }
+                const serialized = ejson.stringify(doc);
+                let canWrite = true;
+                if (isFirst) {
+                    isFirst = false;
+                    canWrite = writeStream.write('  ' + serialized);
+                }
+                else {
+                    canWrite = writeStream.write(',\n  ' + serialized);
+                }
+                // Handle stream backpressure to prevent RAM allocation spikes
+                if (!canWrite) {
+                    await new Promise((resolve) => writeStream.once('drain', resolve));
+                }
             }
-            var serialized = ejson.stringify(docs, undefined, 2);
-            zip.addFile(col.name + '.json', Buffer.from(serialized, 'utf8'));
+            // Write closing bracket
+            writeStream.write('\n]');
+            // Wait for write stream to finish
+            await new Promise((resolve, reject) => {
+                writeStream.end((err) => {
+                    if (err)
+                        reject(err);
+                    else
+                        resolve();
+                });
+            });
         }
         // Add metadata
         var metadata = {
@@ -156,19 +184,58 @@ router.post('/api/:conn/:db/backup', async function (req, res) {
             keepObjectId: keepObjectId,
             collections: collections.filter((c) => c.type !== 'view').map((c) => c.name)
         };
-        zip.addFile('metadata.json', Buffer.from(JSON.stringify(metadata, null, 2), 'utf8'));
-        if (!fs_1.default.existsSync(backupPath)) {
-            fs_1.default.mkdirSync(backupPath);
+        fs_1.default.writeFileSync(path_1.default.join(tmpDir, 'metadata.json'), JSON.stringify(metadata, null, 2), 'utf8');
+        const archiver = require('archiver');
+        const outputStream = fs_1.default.createWriteStream(localZipFilePath);
+        const archive = archiver('zip', { zlib: { level: 9 } });
+        const zipPromise = new Promise((resolve, reject) => {
+            outputStream.on('close', () => resolve());
+            outputStream.on('error', (err) => reject(err));
+            archive.on('error', (err) => reject(err));
+        });
+        // Pipe archive stream directly to disk (O(1) Memory!)
+        archive.pipe(outputStream);
+        // Append files
+        archive.file(path_1.default.join(tmpDir, 'metadata.json'), { name: 'metadata.json' });
+        for (var col of collections) {
+            if (col.type === 'view')
+                continue;
+            archive.file(path_1.default.join(tmpDir, col.name + '.json'), { name: col.name + '.json' });
         }
-        const isProd = process.env.NODE_ENV === 'production';
-        var zipFileName = db_name + '_backup_' + Date.now() + '.zip' + (isProd ? '?nolock=1' : '');
-        var zipFilePath = path_1.default.join(backupPath, zipFileName);
-        zip.writeZip(zipFilePath);
-        res.status(200).json({ 'msg': 'Database successfully backed up' + ': ' + zipFileName });
+        // Finalize/finalize the archive
+        await archive.finalize();
+        await zipPromise;
+        // Copy finalized ZIP to mounted backupPath
+        if (!fs_1.default.existsSync(backupPath)) {
+            fs_1.default.mkdirSync(backupPath, { recursive: true });
+        }
+        const zipFileName = db_name + '_backup_' + Date.now() + '.zip';
+        const finalZipFilePath = path_1.default.join(backupPath, zipFileName);
+        fs_1.default.copyFileSync(localZipFilePath, finalZipFilePath);
+        res.status(200).json({ 'msg': 'Database successfully backed up: ' + zipFileName });
     }
     catch (err) {
         console.error('Backup DB error: ', err);
-        res.status(400).json({ 'msg': 'Unable to backup database' + ': ' + err.message });
+        res.status(400).json({ 'msg': 'Unable to backup database: ' + err.message });
+    }
+    finally {
+        // Clean up temporary files
+        try {
+            if (fs_1.default.existsSync(tmpDir)) {
+                fs_1.default.rmSync(tmpDir, { recursive: true, force: true });
+            }
+        }
+        catch (e) {
+            console.error('Error cleaning up backup temp files:', e);
+        }
+        try {
+            if (fs_1.default.existsSync(localZipFilePath)) {
+                fs_1.default.unlinkSync(localZipFilePath);
+            }
+        }
+        catch (e) {
+            console.error('Error cleaning up local zip file:', e);
+        }
     }
 });
 // Restore a database
@@ -195,77 +262,104 @@ router.post('/api/:conn/:db/restore', async function (req, res) {
             return res.status(400).json({ 'msg': 'Backup file/folder not found: ' + backupFile });
         }
     }
+    const os = require('os');
+    const tmpRestoreDir = path_1.default.join(os.tmpdir(), 'vibemongo_restore_tmp_' + Date.now());
+    const readline = require('readline');
     try {
         var mongo_db = conn.client.db(db_name);
-        var collectionsData = {}; // collName -> Array of docs
         var isZip = backupFilePath.includes('.zip');
         if (isZip) {
-            var AdmZip = require('adm-zip');
-            var zip = new AdmZip(backupFilePath);
-            var zipEntries = zip.getEntries();
-            zipEntries.forEach(function (entry) {
-                if (entry.entryName.endsWith('.json') && entry.entryName !== 'metadata.json') {
-                    var collName = entry.entryName.replace('.json', '');
-                    var fileContent = entry.getData().toString('utf8');
-                    try {
-                        collectionsData[collName] = ejson.parse(fileContent);
-                    }
-                    catch (e) {
-                        console.error('Error parsing collection ' + collName + ' from zip: ', e);
-                    }
-                }
-            });
+            const unzipper = require('unzipper');
+            // Extract via standard stream piping to avoid holding decompressed content in RAM (O(1) Memory!)
+            await fs_1.default.createReadStream(backupFilePath)
+                .pipe(unzipper.Extract({ path: tmpRestoreDir }))
+                .promise();
         }
-        else {
-            // Backward compatibility for standard directory backups
-            var files = fs_1.default.readdirSync(backupFilePath);
-            files.forEach(function (file) {
-                if (file.endsWith('.json') && file !== 'metadata.json') {
-                    var collName = file.replace('.json', '');
-                    var fileContent = fs_1.default.readFileSync(path_1.default.join(backupFilePath, file), 'utf8');
-                    try {
-                        collectionsData[collName] = ejson.parse(fileContent);
-                    }
-                    catch (e) {
-                        console.error('Error parsing collection ' + collName + ' from folder: ', e);
-                    }
-                }
-            });
-        }
-        // Perform restore operations
-        for (var collName in collectionsData) {
-            var docs = collectionsData[collName];
-            if (!Array.isArray(docs))
-                continue;
-            var collection = mongo_db.collection(collName);
+        const targetDir = isZip ? tmpRestoreDir : backupFilePath;
+        const files = fs_1.default.readdirSync(targetDir);
+        // Helper to process a single collection file line-by-line to avoid loading massive arrays into RAM
+        async function restoreCollectionFile(collName, filePath) {
+            const collection = mongo_db.collection(collName);
             if (restoreMode === 'replace') {
-                // Drop collection if exists (or simply delete all documents)
                 await collection.deleteMany({}).catch(() => { });
-                if (docs.length > 0) {
-                    await collection.insertMany(docs);
+            }
+            const fileStream = fs_1.default.createReadStream(filePath);
+            const rl = readline.createInterface({
+                input: fileStream,
+                crlfDelay: Infinity
+            });
+            let batch = [];
+            const BATCH_SIZE = 500;
+            for await (const line of rl) {
+                let trimmed = line.trim();
+                // Skip brackets and empty lines
+                if (trimmed === '[' || trimmed === ']' || trimmed === '')
+                    continue;
+                // Strip leading comma if present
+                if (trimmed.startsWith(',')) {
+                    trimmed = trimmed.substring(1).trim();
+                }
+                // Strip trailing comma if present
+                if (trimmed.endsWith(',')) {
+                    trimmed = trimmed.substring(0, trimmed.length - 1).trim();
+                }
+                if (trimmed === '[' || trimmed === ']' || trimmed === '')
+                    continue;
+                try {
+                    const doc = ejson.parse(trimmed);
+                    batch.push(doc);
+                    if (batch.length >= BATCH_SIZE) {
+                        if (restoreMode === 'replace' || restoreMode === 'insert') {
+                            await collection.insertMany(batch, { ordered: false }).catch((bulkErr) => {
+                                if (bulkErr.name !== 'MongoBulkWriteError' && bulkErr.code !== 11000) {
+                                    throw bulkErr;
+                                }
+                            });
+                        }
+                        else if (restoreMode === 'upsert') {
+                            for (const d of batch) {
+                                if (d._id) {
+                                    await collection.replaceOne({ _id: d._id }, d, { upsert: true });
+                                }
+                                else {
+                                    await collection.insertOne(d);
+                                }
+                            }
+                        }
+                        batch = [];
+                    }
+                }
+                catch (e) {
+                    console.error(`Error parsing line in collection ${collName}:`, e.message);
                 }
             }
-            else if (restoreMode === 'upsert') {
-                // Upsert by _id (if _id is present), otherwise insert
-                for (var doc of docs) {
-                    if (doc._id) {
-                        await collection.replaceOne({ _id: doc._id }, doc, { upsert: true });
-                    }
-                    else {
-                        await collection.insertOne(doc);
-                    }
-                }
-            }
-            else if (restoreMode === 'insert') {
-                // Insert only, skipping existing ObjectIds
-                if (docs.length > 0) {
-                    await collection.insertMany(docs, { ordered: false }).catch(function (bulkErr) {
-                        // Ignore duplicate key errors silently, throw other write errors
+            // Insert remaining documents
+            if (batch.length > 0) {
+                if (restoreMode === 'replace' || restoreMode === 'insert') {
+                    await collection.insertMany(batch, { ordered: false }).catch((bulkErr) => {
                         if (bulkErr.name !== 'MongoBulkWriteError' && bulkErr.code !== 11000) {
                             throw bulkErr;
                         }
                     });
                 }
+                else if (restoreMode === 'upsert') {
+                    for (const d of batch) {
+                        if (d._id) {
+                            await collection.replaceOne({ _id: d._id }, d, { upsert: true });
+                        }
+                        else {
+                            await collection.insertOne(d);
+                        }
+                    }
+                }
+            }
+        }
+        // Process all collection files sequentially
+        for (const file of files) {
+            if (file.endsWith('.json') && file !== 'metadata.json') {
+                const collName = file.replace('.json', '');
+                const filePath = path_1.default.join(targetDir, file);
+                await restoreCollectionFile(collName, filePath);
             }
         }
         res.status(200).json({ 'msg': 'Database successfully restored' });
@@ -273,6 +367,17 @@ router.post('/api/:conn/:db/restore', async function (req, res) {
     catch (err) {
         console.error('Restore DB error: ', err);
         res.status(400).json({ 'msg': 'Unable to restore database' + ': ' + err.message });
+    }
+    finally {
+        // Clean up temporary files
+        try {
+            if (fs_1.default.existsSync(tmpRestoreDir)) {
+                fs_1.default.rmSync(tmpRestoreDir, { recursive: true, force: true });
+            }
+        }
+        catch (e) {
+            console.error('Error cleaning up restore temp folder:', e);
+        }
     }
 });
 exports.default = router;

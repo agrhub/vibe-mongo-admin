@@ -4,8 +4,10 @@
   "description": "Express API server for vibe-mongo-admin",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch --env-file=../.env src/index.ts",
-    "start": "node --env-file=../.env dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "start": "node --max-old-space-size=256 dist/index.js",
+    "monitor": "tsx src/utils/run-monitoring.ts",
+    "monitor:prod": "node dist/utils/run-monitoring.js",
     "build": "tsc && tsc-alias"
   },
   "dependencies": {
@@ -24,6 +26,7 @@
     "@opentelemetry/semantic-conventions": "^1.41.1",
     "@seald-io/nedb": "^4.0.4",
     "adm-zip": "^0.5.17",
+    "archiver": "^7.0.1",
     "async": "^3.2.5",
     "cookie-parser": "^1.4.6",
     "dotenv": "^16.4.5",
@@ -41,9 +44,11 @@
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1",
     "tsc-alias": "^1.8.16",
-    "tsx": "^4.15.0"
+    "tsx": "^4.15.0",
+    "unzipper": "^0.12.3"
   },
   "devDependencies": {
+    "@types/archiver": "^6.0.2",
     "@types/async": "^3.2.25",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.17",
@@ -54,6 +59,7 @@
     "@types/multer": "^2.1.0",
     "@types/nconf": "^0.10.7",
     "@types/node": "^20.14.9",
+    "@types/unzipper": "^0.10.10",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.4.5"

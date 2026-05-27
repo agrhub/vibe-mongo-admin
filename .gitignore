@@ -34,3 +34,6 @@ docs/video_production_guide.md
 server/scratch-translate.js
 server/dist/scratch_test.js
 server/src/scratch_test.ts
+server/data/
+server/src/scratch-list-tools.ts
+server/dist/scratch-list-tools.js

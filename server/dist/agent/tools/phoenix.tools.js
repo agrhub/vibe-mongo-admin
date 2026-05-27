@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listPhoenixTools = listPhoenixTools;
 exports.getSlowQueryTraces = getSlowQueryTraces;
@@ -11,6 +14,8 @@ exports.getPhoenixMcpClient = getPhoenixMcpClient;
 const index_js_1 = require("@modelcontextprotocol/sdk/client/index.js");
 const stdio_js_1 = require("@modelcontextprotocol/sdk/client/stdio.js");
 const GeminiService_js_1 = require("../../services/GeminiService.js");
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 let phoenixMcpClient = null;
 /**
  * Lazy initializer for the Arize Phoenix MCP server subprocess.
@@ -24,7 +29,6 @@ async function getPhoenixMcpClient() {
     const projectName = process.env.PHOENIX_PROJECT_NAME || 'vibe-mongo-admin';
     let phoenixBaseUrl = endpoint;
     try {
-        console.log(`[PhoenixMCP] Spawning @arizeai/phoenix-mcp pointing to ${phoenixBaseUrl}...`);
         const env = {
             ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)),
             PHOENIX_BASE_URL: phoenixBaseUrl,
@@ -36,9 +40,21 @@ async function getPhoenixMcpClient() {
             env['PHOENIX_API_KEY'] = apiKey;
             env['ARIZE_API_KEY'] = apiKey;
         }
+        // Resolve local phoenix-mcp entry script
+        const localMcpPath = path_1.default.join(process.cwd(), 'node_modules/@arizeai/phoenix-mcp/build/index.js');
+        let mcpCommand = 'npx';
+        let mcpArgs = ['--no-install', 'phoenix-mcp', '--baseUrl', phoenixBaseUrl];
+        if (fs_1.default.existsSync(localMcpPath)) {
+            mcpCommand = 'node';
+            mcpArgs = [localMcpPath, '--baseUrl', phoenixBaseUrl];
+            console.log(`[PhoenixMCP] Found local installation. Spawning directly with node pointing to ${phoenixBaseUrl}...`);
+        }
+        else {
+            console.log(`[PhoenixMCP] Spawning @arizeai/phoenix-mcp via npx --no-install pointing to ${phoenixBaseUrl}...`);
+        }
         const transport = new stdio_js_1.StdioClientTransport({
-            command: 'npx',
-            args: ['-y', '@arizeai/phoenix-mcp@latest', '--baseUrl', phoenixBaseUrl],
+            command: mcpCommand,
+            args: mcpArgs,
             env,
         });
         const client = new index_js_1.Client({ name: 'phoenix-agent-client', version: '1.0.0' }, { capabilities: {} });
@@ -245,7 +261,7 @@ async function getSpanAnnotations(spanId) {
  * Falls back to simulated data if Phoenix is not reachable.
  * This is intended to be called periodically by the monitoring cron job.
  */
-async function collectPhoenixSnapshot() {
+async function collectPhoenixSnapshot(limit = 15) {
     const client = await getPhoenixMcpClient();
     const projectName = process.env.PHOENIX_PROJECT_NAME || 'vibe-mongo-admin';
     const now = new Date();
@@ -256,7 +272,7 @@ async function collectPhoenixSnapshot() {
             let rawSpans = null;
             const spansResult = await callPhoenixTool('get-spans', {
                 projectIdentifier: projectName,
-                limit: 200,
+                limit: limit,
             });
             // Phoenix MCP may return spans as an array or as an object with a spans/data field
             if (Array.isArray(spansResult)) {
@@ -272,7 +288,7 @@ async function collectPhoenixSnapshot() {
             if (!rawSpans) {
                 const tracesResult = await callPhoenixTool('list-traces', {
                     projectIdentifier: projectName,
-                    limit: 200,
+                    limit: limit,
                 });
                 if (Array.isArray(tracesResult))
                     rawSpans = tracesResult;
@@ -285,7 +301,7 @@ async function collectPhoenixSnapshot() {
                 // Debug: log first span keys so we can identify the correct field names
                 const firstSpan = rawSpans[0];
                 console.log('[PhoenixMonitor] First span keys:', Object.keys(firstSpan));
-                console.log('[PhoenixMonitor] First span sample:', JSON.stringify(firstSpan, null, 2).substring(0, 500));
+                // console.log('[PhoenixMonitor] First span sample:', JSON.stringify(firstSpan, null, 2).substring(0, 500));
                 // Extract latency values (in ms). Try all known Phoenix field name variants
                 const extractLatencyMs = (s) => {
                     // Direct ms fields
@@ -397,8 +413,8 @@ async function collectPhoenixSnapshot() {
                         statusCode: (s.statusCode ?? s.status_code ?? s.status ?? 'OK').toString(),
                         startTime: s.start_time ?? s.startTime ?? new Date().toISOString(),
                         kind: (s.spanKind ?? s.kind ?? 'chain').toString().toLowerCase(),
-                        input: s.attributes?.["input.value"] ?? s.attributes?.["db.statement"] ?? '',
-                        output: s.attributes?.["output.value"] ?? '',
+                        input: String(s.attributes?.["input.value"] ?? s.attributes?.["db.statement"] ?? '').slice(0, 200),
+                        output: String(s.attributes?.["output.value"] ?? s.attributes?.["db.response"] ?? s.attributes?.["response"] ?? s.attributes?.["llm.output"] ?? s.output ?? '').slice(0, 200),
                         db: s.attributes?.["db.name"] ?? '',
                         collection: s.attributes?.["db.mongodb.collection"] ?? '',
                         totalTokens: extractTokens(s),
@@ -412,26 +428,63 @@ async function collectPhoenixSnapshot() {
     }
     // Graceful fallback — simulated for demo if Phoenix is not running
     console.warn('[PhoenixMonitor] Phoenix not reachable. Generating simulated snapshot.');
-    const ok = Math.floor(Math.random() * 50) + 10;
-    const error = Math.floor(Math.random() * 5);
-    const llmOk = Math.floor(ok * 0.6);
-    const toolOk = Math.floor(ok * 0.3);
+    const generateMockSpans = () => {
+        const list = [];
+        const ops = [
+            { name: 'find', db: 'sample_mflix', coll: 'movies', input: '{"year": {"$lt": 1990}, "genres": "Drama"}', latency: 220 },
+            { name: 'aggregate', db: 'sample_airbnb', coll: 'listingsAndReviews', input: '[{"$match": {"room_type": "Entire home/apt"}}, {"$group": {"_id": "$address.country", "avgPrice": {"$avg": "$price"}}}]', latency: 2269 },
+            { name: 'stats', db: 'sample_airbnb', coll: '', input: '{"dbStats": 1}', latency: 2150 },
+            { name: 'mongodb.aggregate', db: 'sample_geospatial', coll: 'shipwrecks', input: '[{"$match": {"coordinates": {"$geoWithin": {"$centerSphere": [[-73.935242, 40.73061], 0.1]}}}}]', latency: 2100 },
+            { name: 'find', db: 'sample_mflix', coll: 'comments', input: '{"movie_id": {"$oid": "573a1390f293160aaa410519"}}', latency: 45 },
+            { name: 'insertOne', db: 'sample_supplies', coll: 'sales', input: '{"storeLocation": "Denver", "items": [{"name": "binder", "tags": ["office"]}]}', latency: 120 },
+            { name: 'updateOne', db: 'sample_analytics', coll: 'accounts', input: '{"account_id": 371138}, {"$set": {"limit": 10000}}', latency: 280 },
+            { name: 'deleteMany', db: 'sample_training', coll: 'grades', input: '{"student_id": {"$gt": 10000}}', latency: 740 },
+            { name: 'gemini.generateText', db: '', coll: '', input: '{"model": "gemini-3.1-flash-lite", "prompt": "Analyze database health..."}', latency: 1540, kind: 'llm', tokens: 840 },
+            { name: 'getServerStatus', db: 'admin', coll: '', input: '{"serverStatus": 1}', latency: 85 }
+        ];
+        for (let i = 0; i < 50; i++) {
+            const op = ops[i % ops.length];
+            const isSlow = i === 1 || i === 2 || i === 3 || i === 8 || i === 11 || i === 21;
+            const isError = i === 7 || i === 17;
+            const durationMs = isSlow ? op.latency + Math.floor(Math.random() * 300) : Math.floor(Math.random() * 150) + 10;
+            list.push({
+                traceId: `t-mock-trace-${100000 + i}`,
+                spanId: `s-mock-span-${200000 + i}`,
+                name: op.name,
+                durationMs,
+                statusCode: isError ? 'ERROR' : 'OK',
+                startTime: new Date(Date.now() - i * 60000).toISOString(),
+                kind: op.kind || (op.name.includes('gemini') ? 'llm' : op.name.includes('tool') ? 'tool' : 'chain'),
+                input: op.input,
+                output: isError ? '{"ok": 0, "errmsg": "Connection pool timeout"}' : '{"ok": 1, "nModified": 1}',
+                db: op.db,
+                collection: op.coll,
+                totalTokens: op.tokens || 0
+            });
+        }
+        return list;
+    };
+    const mockSpans = generateMockSpans();
+    const ok = mockSpans.filter(s => s.statusCode === 'OK').length;
+    const error = mockSpans.filter(s => s.statusCode === 'ERROR').length;
+    const llmOk = mockSpans.filter(s => s.kind === 'llm' && s.statusCode === 'OK').length;
+    const toolOk = mockSpans.filter(s => s.kind === 'tool' && s.statusCode === 'OK').length;
     return {
         source: 'simulated',
         date: dateKey,
         timestamp: now,
-        totalSpans: ok + error,
+        totalSpans: mockSpans.length,
         ok, error,
-        p50: parseFloat((Math.random() * 0.3 + 0.05).toFixed(3)),
-        p75: parseFloat((Math.random() * 0.8 + 0.2).toFixed(3)),
-        p90: parseFloat((Math.random() * 1.5 + 0.3).toFixed(3)),
-        p95: parseFloat((Math.random() * 3 + 0.8).toFixed(3)),
-        p99: parseFloat((Math.random() * 5 + 1).toFixed(3)),
-        llmOk, llmErr: Math.floor(Math.random() * 3),
-        toolOk, toolErr: Math.floor(Math.random() * 2),
-        promptTokens: Math.floor(Math.random() * 5000),
-        completionTokens: Math.floor(Math.random() * 2000),
-        rootSpans: [],
+        p50: 0.125,
+        p75: 0.450,
+        p90: 1.540,
+        p95: 2.150,
+        p99: 2.380,
+        llmOk, llmErr: mockSpans.filter(s => s.kind === 'llm' && s.statusCode === 'ERROR').length,
+        toolOk, toolErr: mockSpans.filter(s => s.kind === 'tool' && s.statusCode === 'ERROR').length,
+        promptTokens: 4200,
+        completionTokens: 1800,
+        rootSpans: mockSpans,
     };
 }
 /**

@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.initTracing = initTracing;
 exports.traceMongoApiMiddleware = traceMongoApiMiddleware;
@@ -16,6 +19,21 @@ exports.traceMongoApiMiddleware = traceMongoApiMiddleware;
  *    Set PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces
  *    Set PHOENIX_PROJECT_NAME=vibe-mongo-admin
  */
+const dotenv_1 = __importDefault(require("dotenv"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
+// Programmatically load .env from the parent directory if it exists, otherwise fallback safely
+const parentEnvPath = path_1.default.resolve(process.cwd(), '../.env');
+const localEnvPath = path_1.default.resolve(process.cwd(), '.env');
+if (fs_1.default.existsSync(parentEnvPath)) {
+    dotenv_1.default.config({ path: parentEnvPath });
+}
+else if (fs_1.default.existsSync(localEnvPath)) {
+    dotenv_1.default.config({ path: localEnvPath });
+}
+else {
+    dotenv_1.default.config(); // silently fallback
+}
 const phoenix_otel_1 = require("@arizeai/phoenix-otel");
 const instrumentation_1 = require("@opentelemetry/instrumentation");
 const instrumentation_mongodb_1 = require("@opentelemetry/instrumentation-mongodb");
@@ -91,6 +109,10 @@ function traceMongoApiMiddleware(req, res, next) {
     const { withSpan, trace } = require('@arizeai/phoenix-otel');
     const url = req.originalUrl || req.url || '';
     const method = req.method || 'GET';
+    // EXCLUDE monitoring, telemetry, backup, and restore routes to prevent massive recursive feedback loop and OOM!
+    if (url.includes('/monitoring') || url.includes('/phoenix') || url.includes('/backup') || url.includes('/restore')) {
+        return next();
+    }
     const spanName = `${method} ${url.split('?')[0]}`;
     withSpan(async () => {
         const span = trace.getActiveSpan();

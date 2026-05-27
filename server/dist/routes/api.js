@@ -11,7 +11,7 @@ router.all('/api/*', function (req, res, next) {
     // Check if auth is configured
     if (passwordConf && passwordConf.hasOwnProperty('password')) {
         // Allow login/logout and status check without auth session
-        if (req.path === '/api/auth/login' || req.path === '/api/auth/logout' || req.path === '/api/auth/status' || req.path === '/api/locales') {
+        if (req.path === '/api/auth/login' || req.path === '/api/auth/logout' || req.path === '/api/auth/status' || req.path === '/api/locales' || req.path === '/api/monitoring/trigger') {
             next();
         }
         else {

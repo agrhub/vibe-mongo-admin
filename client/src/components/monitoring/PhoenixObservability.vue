@@ -7,9 +7,9 @@
           <span class="lbl" style="color: #0ea5e9;">{{ store.t('Total Traces (Last 24h)') }}</span>
           <span class="val">{{ metrics.totalTraces }}</span>
           <el-tag v-if="dataSource" size="small"
-            :type="dataSource === 'stored' ? 'success' : dataSource === 'live_fallback' ? 'warning' : 'info'"
+            :type="dataSource === 'stored' ? 'success' : dataSource === 'live' ? 'primary' : dataSource === 'live_fallback' ? 'warning' : 'info'"
             style="margin-top: 8px;">
-            {{ dataSource === 'stored' ? '● Live DB' : dataSource === 'live_fallback' ? '⚡ MCP' : '◌ Simulated' }}
+            {{ dataSource === 'stored' ? '● Live DB' : dataSource === 'live' ? '⚡ Phoenix Cloud' : dataSource === 'live_fallback' ? '⚡ MCP' : '◌ Simulated' }}
           </el-tag>
         </el-card>
       </el-col>
@@ -145,8 +145,8 @@
       </el-table-column>
     </el-table>
 
-    <!-- Pagination -->
-    <div class="pagination-bar">
+    <!-- Pagination & Load More -->
+    <div class="pagination-bar" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 10px;">
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
@@ -154,33 +154,54 @@
         :total="filteredSpans.length"
         layout="total, sizes, prev, pager, next"
         background
-        small
+        small round
       />
+      <el-button 
+        v-if="nextCursor" 
+        type="primary" 
+        size="small" 
+        plain round
+        icon="Download"
+        @click="$emit('loadMore')"
+      >
+        {{ store.t('Load More Traces') }}
+      </el-button>
     </div>
   </el-card>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue';
-import { DataBoard, CircleCheck, CircleClose, Search, Timer, Coin } from '@element-plus/icons-vue';
+import { DataBoard, CircleCheck, CircleClose, Search, Timer, Coin, ArrowDown } from '@element-plus/icons-vue';
 import { store } from '../../stores';
 import PhoenixMetricCharts from './PhoenixMetricCharts.vue';
 
 const props = defineProps({
-  metrics:    { type: Object,  default: null },
-  spans:      { type: Array,   default: () => [] },
-  dataSource: { type: String,  default: '' },
-  showMetrics:{ type: Boolean, default: true },
-  showTable:  { type: Boolean, default: true },
+  metrics:     { type: Object,  default: null },
+  spans:       { type: Array,   default: () => [] },
+  dataSource:  { type: String,  default: '' },
+  showMetrics: { type: Boolean, default: true },
+  showTable:   { type: Boolean, default: true },
+  nextCursor:  { type: String,  default: null },
+  currentPage: { type: Number,  default: 1 },
+  pageSize:    { type: Number,  default: 20 },
 });
-const emit = defineEmits(['openSpan', 'filterChange']);
+const emit = defineEmits(['openSpan', 'filterChange', 'loadMore', 'update:currentPage', 'update:pageSize']);
 
 // Search / filter state
 const searchText   = ref('');
 const filterStatus = ref('');
 const filterKind   = ref('');
-const currentPage  = ref(1);
-const pageSize     = ref(20);
+
+// Computed writable properties for v-model binding compatibility
+const currentPage = computed({
+  get: () => props.currentPage,
+  set: (val) => emit('update:currentPage', val)
+});
+const pageSize = computed({
+  get: () => props.pageSize,
+  set: (val) => emit('update:pageSize', val)
+});
 
 // Reset to page 1 on filter changes
 watch([searchText, filterStatus, filterKind], () => {

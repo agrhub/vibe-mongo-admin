@@ -1,5 +1,5 @@
 # VibeMongo Admin — Documentation
-![Connection Dashboard](docs/images/dashboard.png)
+![VibeMongo Admin](docs/images/agent_welcome.png)
 
 > A modern, AI-first MongoDB administration dashboard powered by a triad of cutting-edge technologies: **Google Cloud Agent (ADK & Gemini)**, the **MongoDB MCP Server**, and **Arize Phoenix Cloud & MCP** for autonomous monitoring and LLM evaluation.
 
@@ -191,7 +191,7 @@ pnpm run dev
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `PORT` | Yes | Backend server port (default: `4000`) |
-| `HOST` | Yes | Backend host (default: `localhost`) |
+| `HOST` | Yes | Backend host (default: `0.0.0.0`) |
 | `PASSWORD` | Yes | Admin dashboard password |
 | `VITE_API_URL` | Yes | Frontend → Backend URL |
 | `GOOGLE_CLOUD_PROJECT` | Yes | GCP Project ID for Vertex AI |
@@ -201,6 +201,18 @@ pnpm run dev
 | `AGENT_MODEL` | Yes | Gemini model name (e.g. `gemini-3.1-flash-lite`) |
 | `ENCRYPTION_KEY` | Yes | 32-char key for encrypting MongoDB connection strings |
 | `NODE_ENV` | Yes | `development` or `production` |
+| `PHOENIX_PROJECT_NAME` | Yes | Arize Phoenix project name for tracing (Get from https://app.phoenix.arize.com) |
+| `PHOENIX_COLLECTOR_ENDPOINT` | Yes | Arize Phoenix collector endpoint (E.g. https://app.phoenix.arize.com/s/your_workspace) |
+| `PHOENIX_API_KEY` | Yes | Arize API Key for tracing (Get from https://app.phoenix.arize.com/settings?tab=api-keys) |
+
+---
+
+## 👤 Project Owner
+
+- **Name:** Minh Truong
+- **Email:** camtruong512@gmail.com
+- **GitHub:** [camtruong512](https://github.com/camtruong512)
+- **LinkedIn:** [Minh Truong](https://www.linkedin.com/in/cam-minh-truong-367248ab)
 
 ---
 

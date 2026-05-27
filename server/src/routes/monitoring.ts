@@ -1,8 +1,10 @@
 import { Router, Request as ExpressRequest, Response } from 'express';
 type Request = ExpressRequest<any>;
 import _ from 'lodash';
+import { mongoService } from '../services/MongoService.js';
 
 const router = Router();
+var monitoring = require('../utils/monitoring');
 
 // ================= METRICS MONITORING =================
 
@@ -11,10 +13,28 @@ router.get('/api/:conn/monitoring', function (req: Request, res: Response) {
     var dayBack = new Date();
     dayBack.setDate(dayBack.getDate() - 1);
 
-    req.db.find({ connectionName: req.params.conn, eventDate: { $gte: dayBack } }).sort({ eventDate: 1 }).exec(function (err: any, serverEvents: any) {
-        if (err || !serverEvents || serverEvents.length === 0) {
-            return res.status(200).json({ dataRetrieved: false, data: {} });
+    // Proactive trigger for Cloud Run or idle instances:
+    // If the latest record is older than 35 seconds (or doesn't exist), run it on-demand.
+    req.db.findOne({ connectionName: req.params.conn }).sort({ eventDate: -1 }).exec(async function (err: any, lastEvent: any) {
+        const now = new Date();
+        const lastRunTime = lastEvent ? new Date(lastEvent.eventDate) : new Date(0);
+        const secondsSinceLastRun = (now.getTime() - lastRunTime.getTime()) / 1000;
+
+        if (secondsSinceLastRun > 35) {
+            console.log(`[CloudRun-Monitoring] Proactive server metrics trigger for ${req.params.conn} (last run: ${secondsSinceLastRun.toFixed(1)}s ago)`);
+            try {
+                monitoring.serverMonitoring(req.db, mongoService.getConnections());
+                // Sleep slightly to let the asynchronous serverStatus call persist the record
+                await new Promise(r => setTimeout(r, 600));
+            } catch (e: any) {
+                console.error('[CloudRun-Monitoring] Proactive trigger failed:', e.message);
+            }
         }
+
+        req.db.find({ connectionName: req.params.conn, eventDate: { $gte: dayBack } }).sort({ eventDate: 1 }).exec(function (err: any, serverEvents: any) {
+            if (err || !serverEvents || serverEvents.length === 0) {
+                return res.status(200).json({ dataRetrieved: false, data: {} });
+            }
 
         var connectionsCurrent: any[] = [];
         var connectionsAvailable: any[] = [];
@@ -96,13 +116,14 @@ router.get('/api/:conn/monitoring', function (req: Request, res: Response) {
             }
         }
     });
+    });
 });
 
 // Get Phoenix metrics from local NeDB (pre-computed by background job)
-// Get Phoenix metrics from local NeDB (pre-computed by background job)
 router.get('/api/:conn/monitoring/phoenix', async function (req: Request, res: Response) {
     try {
-        const isLive = req.query.live === 'true';
+        const cursor = req.query.cursor as string | undefined;
+        const limit  = Number(req.query.limit || 20);
         // Server-side filter params forwarded from the client search bar
         const searchText   = (req.query.search   as string || '').trim().toLowerCase();
         const filterStatus = (req.query.status   as string || '').trim().toUpperCase();
@@ -159,6 +180,7 @@ router.get('/api/:conn/monitoring/phoenix', async function (req: Request, res: R
                        output.includes(searchText) || db.includes(searchText);
             });
         }
+
         /** Build structured alerts from spans with durationMs above threshold */
         function buildAlertsFromSpans(spans: any[], thresholdMs = 1000): any {
             const slowSpans = spans
@@ -190,151 +212,91 @@ router.get('/api/:conn/monitoring/phoenix', async function (req: Request, res: R
             };
         }
 
-        if (isLive) {
-            try {
-                const { collectPhoenixSnapshot } = await import('../agent/tools/phoenix.tools.js');
-                const snapshot = await collectPhoenixSnapshot();
-                const d = new Date();
-                const dateKey = `${d.getMonth() + 1}/${d.getDate()}`;
-                const allSpans  = snapshot.rootSpans ?? [];
-                const alerts    = buildAlertsFromSpans(allSpans);
-                const spans     = filterSpans(allSpans);
+        // Try to fetch from NeDB pre-computed phoenix_dashboard cache first
+        req.db.findOne({ type: 'phoenix_dashboard' }).sort({ timestamp: -1 }).exec(async function (err: any, cached: any) {
+            if (!err && cached) {
+                const filteredSpans = filterSpans(cached.spans || []);
+                let tableSpans: any[] = [];
+                let nextCursor: string | undefined = undefined;
+
+                if (cursor) {
+                    if (cursor.startsWith('offset_')) {
+                        const offset = parseInt(cursor.replace('offset_', ''), 10) || 0;
+                        tableSpans = filteredSpans.slice(offset, offset + limit);
+                        if (filteredSpans.length > offset + limit) {
+                            nextCursor = `offset_${offset + limit}`;
+                        }
+                    } else {
+                        tableSpans = filteredSpans.slice(0, limit);
+                        if (filteredSpans.length > limit) {
+                            nextCursor = `offset_${limit}`;
+                        }
+                    }
+                } else {
+                    tableSpans = filteredSpans.slice(0, limit);
+                    if (filteredSpans.length > limit) {
+                        nextCursor = `offset_${limit}`;
+                    }
+                }
+
+                // Pre-trigger on-demand background refresh if cache is older than 45 seconds to keep it fresh
+                const ageSec = (Date.now() - new Date(cached.timestamp).getTime()) / 1000;
+                if (ageSec > 45) {
+                    console.log(`[PhoenixCache] Proactive background refresh triggered (cache age: ${ageSec.toFixed(0)}s)`);
+                    monitoring.phoenixMonitoring(req.db).catch(() => {});
+                }
+
                 return res.status(200).json({
                     success: true,
-                    source: 'live',
+                    source: cached.source || 'live',
+                    alerts: cached.alerts,
+                    metrics: cached.metrics,
+                    spans: tableSpans,
+                    nextCursor,
+                    total: filteredSpans.length
+                });
+            }
+
+            // Fallback: If cache doesn't exist yet, fetch live snapshot synchronously once and populate cache
+            console.log('[PhoenixCache] Cache miss! Querying Phoenix Cloud live synchronously...');
+            try {
+                const { collectPhoenixSnapshot } = await import('../agent/tools/phoenix.tools.js');
+                const snapshot = await collectPhoenixSnapshot(100);
+                const d = new Date();
+                const dateKey = `${d.getMonth() + 1}/${d.getDate()}`;
+                const allSpans = snapshot.rootSpans ?? [];
+                const alerts = buildAlertsFromSpans(allSpans);
+                const filteredSpans = filterSpans(allSpans);
+                const tableSpans = filteredSpans.slice(0, limit);
+
+                let nextCursor: string | undefined = undefined;
+                if (filteredSpans.length > limit) {
+                    nextCursor = `offset_${limit}`;
+                }
+
+                // Trigger background job to populate the heavy cache asynchronously
+                monitoring.phoenixMonitoring(req.db).catch(() => {});
+
+                return res.status(200).json({
+                    success: true,
+                    source: 'live_fallback',
                     alerts,
                     metrics: {
                         totalTraces: snapshot.totalSpans ?? 0,
                         latencyP50: `${Math.round((snapshot.p50 ?? 0) * 1000)}ms`,
-                        latencyP99: `${((snapshot.p99 ?? 0)).toFixed(1)}s`,
+                        latencyP99: `${(snapshot.p99 ?? 0).toFixed(1)}s`,
                         tracesOverTime: [{ date: dateKey, ok: snapshot.ok ?? 0, error: snapshot.error ?? 0 }],
                         latencyPercentiles: [{ date: dateKey, p50: snapshot.p50 ?? 0, p90: snapshot.p90 ?? 0, p99: snapshot.p99 ?? 0 }],
                     },
-                    spans,
-                    total: spans.length,
+                    spans: tableSpans,
+                    nextCursor,
+                    total: filteredSpans.length
                 });
-            } catch (liveErr: any) {
-                console.error('[PhoenixMonitor] Live query failed, falling back to local NeDB storage:', liveErr.message);
+            } catch (fallbackErr: any) {
+                console.error('[PhoenixMonitor] Fallback query failed:', fallbackErr.message);
+                return res.status(500).json({ success: false, msg: 'Could not fetch Phoenix traces', error: fallbackErr.message });
             }
-        }
-
-
-        // Query the last 24h of stored phoenix snapshots from NeDB
-        const dayBack = new Date();
-        dayBack.setHours(dayBack.getHours() - 24);
-
-        req.db.find({ type: 'phoenix', timestamp: { $gte: dayBack } })
-            .sort({ timestamp: 1 })
-            .exec(async function (err: any, snapshots: any[]) {
-                // If no stored data yet, fall back to a one-time live fetch
-                if (err || !snapshots || snapshots.length === 0) {
-                    try {
-                        const { collectPhoenixSnapshot } = await import('../agent/tools/phoenix.tools.js');
-                        const snapshot = await collectPhoenixSnapshot();
-                        const d = new Date();
-                        const dateKey = `${d.getMonth() + 1}/${d.getDate()}`;
-                        const allSpans = snapshot.rootSpans ?? [];
-                        const alerts = buildAlertsFromSpans(allSpans);
-                        const spans = filterSpans(allSpans);
-                        return res.status(200).json({
-                            success: true,
-                            source: 'live_fallback',
-                            alerts,
-                            metrics: {
-                                totalTraces: snapshot.totalSpans ?? 0,
-                                latencyP50: `${Math.round((snapshot.p50 ?? 0) * 1000)}ms`,
-                                latencyP99: `${((snapshot.p99 ?? 0)).toFixed(1)}s`,
-                                tracesOverTime: [{ date: dateKey, ok: snapshot.ok ?? 0, error: snapshot.error ?? 0 }],
-                                latencyPercentiles: [{ date: dateKey, p50: snapshot.p50 ?? 0, p90: snapshot.p90 ?? 0, p99: snapshot.p99 ?? 0 }],
-                            },
-                            spans,
-                            total: spans.length,
-                        });
-                    } catch (liveErr: any) {
-                        return res.status(500).json({ success: false, msg: 'Could not fetch Phoenix traces', error: liveErr.message });
-                    }
-                }
-
-                // --- Aggregate stored snapshots into chart data ---
-
-                // Group by date label for tracesOverTime and latencyPercentiles
-                type DateBucket = { ok: number; error: number; latencies: number[]; llmOk: number; llmErr: number; toolOk: number; toolErr: number; prompt: number; completion: number };
-                const byDate: Record<string, DateBucket> = {};
-
-                for (const snap of snapshots) {
-                    const key = snap.date ?? new Date(snap.timestamp).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
-                    if (!byDate[key]) byDate[key] = { ok: 0, error: 0, latencies: [], llmOk: 0, llmErr: 0, toolOk: 0, toolErr: 0, prompt: 0, completion: 0 };
-                    byDate[key].ok    += snap.ok    ?? 0;
-                    byDate[key].error += snap.error ?? 0;
-                    byDate[key].llmOk  += snap.llmOk  ?? 0;
-                    byDate[key].llmErr += snap.llmErr  ?? 0;
-                    byDate[key].toolOk  += snap.toolOk  ?? 0;
-                    byDate[key].toolErr += snap.toolErr ?? 0;
-                    byDate[key].prompt     += snap.promptTokens     ?? 0;
-                    byDate[key].completion += snap.completionTokens ?? 0;
-                    // Collect sample latency values for percentile calc
-                    if (snap.p50) byDate[key].latencies.push(snap.p50);
-                    if (snap.p90) byDate[key].latencies.push(snap.p90);
-                    if (snap.p99) byDate[key].latencies.push(snap.p99);
-                }
-
-                const percentile = (arr: number[], p: number) => {
-                    if (arr.length === 0) return 0;
-                    const sorted = [...arr].sort((a, b) => a - b);
-                    const idx = Math.max(0, Math.ceil((p / 100) * sorted.length) - 1);
-                    return parseFloat(sorted[idx].toFixed(3));
-                };
-
-                const tracesOverTime   = Object.entries(byDate).map(([date, d]) => ({ date, ok: d.ok, error: d.error }));
-                const latencyPercentiles = Object.entries(byDate).map(([date, d]) => ({
-                    date,
-                    p50: percentile(d.latencies, 50),
-                    p75: percentile(d.latencies, 75),
-                    p90: percentile(d.latencies, 90),
-                    p95: percentile(d.latencies, 95),
-                    p99: percentile(d.latencies, 99),
-                }));
-                const llmSpans  = Object.entries(byDate).map(([date, d]) => ({ date, ok: d.llmOk,  error: d.llmErr }));
-                const toolSpans = Object.entries(byDate).map(([date, d]) => ({ date, ok: d.toolOk, error: d.toolErr }));
-                const tokenUsage = Object.entries(byDate).map(([date, d]) => ({ date, prompt: d.prompt, completion: d.completion }));
-
-                // Latest snapshot for summary stats and root spans
-                const latest = snapshots[snapshots.length - 1];
-                const totalTraces = snapshots.reduce((sum, s) => sum + (s.totalSpans ?? 0), 0);
-                const allP50 = snapshots.map((s: any) => s.p50 ?? 0).filter(Boolean);
-                const allP99 = snapshots.map((s: any) => s.p99 ?? 0).filter(Boolean);
-                const avgP50 = allP50.length ? allP50.reduce((a, b) => a + b, 0) / allP50.length : 0;
-                const avgP99 = allP99.length ? allP99.reduce((a, b) => a + b, 0) / allP99.length : 0;
-
-                // Generate alerts from stored spans
-                const { collectPhoenixSnapshot } = await import('../agent/tools/phoenix.tools.js');
-                let latestLiveSpans: any[] = [];
-                try {
-                    const freshSnap = await collectPhoenixSnapshot();
-                    latestLiveSpans = freshSnap.rootSpans ?? [];
-                } catch { latestLiveSpans = latest?.rootSpans ?? []; }
-
-                const alerts = buildAlertsFromSpans(latestLiveSpans);
-                const rawStoredSpans = latestLiveSpans.length ? latestLiveSpans : (latest?.rootSpans ?? []);
-                const spans = filterSpans(rawStoredSpans);
-                res.status(200).json({
-                    success: true,
-                    source: 'stored',
-                    alerts,
-                    metrics: {
-                        totalTraces,
-                        latencyP50: `${Math.round(avgP50 * 1000)}ms`,
-                        latencyP99: `${avgP99.toFixed(1)}s`,
-                        tracesOverTime,
-                        latencyPercentiles,
-                        llmSpans,
-                        toolSpans,
-                        tokenUsage,
-                    },
-                    spans,
-                    total: spans.length,
-                });
-            });
+        });
     } catch (err: any) {
         console.error('[Monitoring] Phoenix health check failed:', err);
         res.status(500).json({ success: false, msg: 'Could not fetch Phoenix traces' });
@@ -431,5 +393,31 @@ function averageDatapoints(datapoints: any, limit: number) {
     }
     return result;
 }
+
+// Explicit POST route to trigger both Server and Phoenix monitoring (for Google Cloud Scheduler or manual runs)
+router.post('/api/monitoring/trigger', async function (req: Request, res: Response) {
+    try {
+        console.log('[MonitoringTrigger] Explicitly invoked metrics collection');
+        
+        // 1. Run Server Monitoring for all connected active connections
+        monitoring.serverMonitoring(req.db, mongoService.getConnections());
+        
+        // 2. Run Phoenix Monitoring
+        await monitoring.phoenixMonitoring(req.db);
+        
+        return res.status(200).json({
+            success: true,
+            msg: 'Monitoring collection triggered successfully',
+            timestamp: new Date()
+        });
+    } catch (err: any) {
+        console.error('[MonitoringTrigger] Trigger failed:', err);
+        return res.status(500).json({
+            success: false,
+            msg: 'Monitoring trigger failed',
+            error: err.message
+        });
+    }
+});
 
 export default router;

@@ -78,25 +78,32 @@ exports.get_db_status = function (mongo_db: any, cb: any) {
 
 // Gets the list of available database backups
 exports.get_backups = function (cb: any) {
-    var backupPath = path.join(__dirname, '../../backups');
+    var backupPath = path.join(__dirname, '../../data/backups');
 
     if (!fs.existsSync(backupPath)) {
-        fs.mkdirSync(backupPath);
+        fs.mkdirSync(backupPath, { recursive: true });
     }
 
     fs.readdir(backupPath, function (err: any, files: any) {
         if (err) return cb(err, []);
-        // Custom junk filter: ignore hidden files starting with '.' and Windows desktop files
+        // Custom junk filter: ignore hidden files, Windows desktop files, and require .zip extension
         var filteredFiles = files.filter(function (filename: string) {
-            return !filename.startsWith('.') && filename !== 'Thumbs.db' && filename !== 'desktop.ini';
+            return !filename.startsWith('.') && 
+                   filename !== 'Thumbs.db' && 
+                   filename !== 'desktop.ini' && 
+                   filename.endsWith('.zip');
         });
         // Enrich each file with size and date metadata
-        var enriched = filteredFiles.map(function (filename: string) {
+        var enriched: any[] = [];
+        filteredFiles.forEach(function (filename: string) {
             try {
-                var stat = fs.statSync(path.join(backupPath, filename));
-                return { name: filename, size: stat.size, date: stat.mtime.toISOString() };
+                var fullPath = path.join(backupPath, filename);
+                var stat = fs.statSync(fullPath);
+                if (stat.isFile()) {
+                    enriched.push({ name: filename, size: stat.size, date: stat.mtime.toISOString() });
+                }
             } catch (e) {
-                return { name: filename, size: 0, date: null };
+                // Ignore files that cannot be stated
             }
         });
         // Sort by date descending (newest first)

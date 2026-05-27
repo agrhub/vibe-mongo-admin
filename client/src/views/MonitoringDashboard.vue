@@ -87,11 +87,15 @@
       <!-- Tab 2: Traces -->
       <el-tab-pane :label="store.t('Traces')" name="traces">
         <PhoenixObservability
+          v-model:currentPage="tracesCurrentPage"
+          v-model:pageSize="tracesPageSize"
           :spans="phoenixSpansData"
+          :next-cursor="nextCursor"
           :show-metrics="false"
           :show-table="true"
           @open-span="openSpan"
           @filter-change="handleFilterChange"
+          @load-more="loadMoreSpans"
         />
       </el-tab-pane>
       
@@ -142,6 +146,9 @@ const phoenixFullMetrics = ref(null);
 const phoenixSpansData   = ref([]);
 const phoenixDataSource  = ref('');
 const activeFilters      = ref({ search: '', status: '', kind: '' });
+const nextCursor         = ref(null);
+const tracesCurrentPage  = ref(1);
+const tracesPageSize     = ref(20);
 
 const traceDrawerVisible = ref(false);
 const selectedSpan       = ref(null);
@@ -230,6 +237,7 @@ function handleAnalyze(traceId) {
 
 function handleFilterChange(filters) {
   activeFilters.value = filters;
+  tracesCurrentPage.value = 1;
   fetchPhoenixHealth(filters.search, filters.status, filters.kind);
 }
 
@@ -276,6 +284,7 @@ async function fetchPhoenixHealth(search = '', status = '', kind = '') {
         phoenixFullMetrics.value = res.data.metrics;
         phoenixDataSource.value  = res.data.source ?? 'unknown';
       }
+      nextCursor.value = res.data.nextCursor || null;
       if (res.data.spans?.length) {
         phoenixSpansData.value = res.data.spans;
       } else {
@@ -291,6 +300,38 @@ async function fetchPhoenixHealth(search = '', status = '', kind = '') {
     }
   } catch (e) {
     console.error('Failed to load Phoenix health traces', e);
+  }
+}
+
+async function loadMoreSpans() {
+  const conn = route.params.conn;
+  if (!conn || !nextCursor.value) return;
+  try {
+    const res = await axios.get(`/api/${conn}/monitoring/phoenix`, {
+      params: {
+        live: 'true',
+        cursor: nextCursor.value,
+        search: activeFilters.value.search,
+        status: activeFilters.value.status,
+        kind: activeFilters.value.kind
+      }
+    });
+    if (res.data?.success) {
+      if (res.data.spans?.length) {
+        const previousLength = phoenixSpansData.value.length;
+        phoenixSpansData.value = [...phoenixSpansData.value, ...res.data.spans];
+        
+        // Calculate newly occupied page index and jump to it
+        const newPage = Math.floor(previousLength / tracesPageSize.value) + 1;
+        setTimeout(() => {
+          tracesCurrentPage.value = newPage;
+        }, 100);
+      }
+      nextCursor.value = res.data.nextCursor || null;
+    }
+  } catch (e) {
+    console.error('Failed to load more Phoenix spans', e);
+    ElMessage.error(store.t('Error loading more spans'));
   }
 }
 

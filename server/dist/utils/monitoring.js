@@ -146,13 +146,115 @@ exports.phoenixMonitoring = async function (monitoringDB) {
     try {
         // Lazy-import to avoid circular deps at startup
         const { collectPhoenixSnapshot } = await import('../agent/tools/phoenix.tools.js');
-        const snapshot = await collectPhoenixSnapshot();
-        // Persist to local NeDB as a phoenix-typed record
-        monitoringDB.insert({ type: 'phoenix', ...snapshot }, function (err) {
-            if (err)
-                console.error('[PhoenixMonitor] Failed to persist snapshot:', err);
-        });
-        // Cleanup old records (keep only last 24 hours)
+        // Fetch up to 500 spans for high statistical accuracy
+        const snapshot = await collectPhoenixSnapshot(500);
+        if (snapshot) {
+            const allSpans = snapshot.rootSpans ?? [];
+            // 1. Build alerts from slow spans (>= 1000ms)
+            const slowSpans = allSpans
+                .filter((s) => (s.durationMs ?? 0) >= 1000)
+                .sort((a, b) => (b.durationMs ?? 0) - (a.durationMs ?? 0));
+            const slowQueries = slowSpans.map((s) => ({
+                traceId: s.traceId ?? s.spanId ?? '',
+                spanId: s.spanId ?? '',
+                name: s.name ?? 'unknown',
+                db: s.db ?? '',
+                collection: s.collection ?? '',
+                operation: s.kind ?? 'chain',
+                durationMs: Math.round(s.durationMs ?? 0),
+                statusCode: s.statusCode ?? 'OK',
+                startTime: s.startTime ?? '',
+            }));
+            const alerts = slowSpans.length === 0
+                ? { source: 'live', status: 'OK', slowQueries: [] }
+                : {
+                    source: 'live',
+                    status: 'WARNING',
+                    traceSummary: `${slowSpans.length} slow span(s) detected. Worst: ${slowQueries[0].name} (${Math.round(slowQueries[0].durationMs)}ms)`,
+                    slowQueries
+                };
+            // 2. Pre-compute hourly time series for charts
+            const hourlySeries = {};
+            const now = Date.now();
+            // Initialize 24 hourly buckets
+            for (let i = 0; i < 24; i++) {
+                const hDate = new Date(now - i * 3600 * 1000);
+                const key = `${hDate.getHours()}:00`;
+                hourlySeries[key] = { ok: 0, error: 0, latencies: [] };
+            }
+            allSpans.forEach((s) => {
+                const sDate = new Date(s.startTime);
+                if (!isNaN(sDate.getTime())) {
+                    const key = `${sDate.getHours()}:00`;
+                    if (hourlySeries[key]) {
+                        if (s.statusCode === 'ERROR') {
+                            hourlySeries[key].error++;
+                        }
+                        else {
+                            hourlySeries[key].ok++;
+                        }
+                        hourlySeries[key].latencies.push(s.durationMs);
+                    }
+                }
+            });
+            const tracesOverTime = Object.entries(hourlySeries).reverse().map(([date, val]) => ({
+                date,
+                ok: val.ok,
+                error: val.error
+            }));
+            const percentile = (arr, p) => {
+                if (arr.length === 0)
+                    return 0;
+                const idx = Math.max(0, Math.ceil((p / 100) * arr.length) - 1);
+                return arr[idx];
+            };
+            const latencyPercentiles = Object.entries(hourlySeries).reverse().map(([date, val]) => {
+                const sorted = val.latencies.sort((a, b) => a - b);
+                return {
+                    date,
+                    p50: parseFloat((percentile(sorted, 50) / 1000).toFixed(3)),
+                    p90: parseFloat((percentile(sorted, 90) / 1000).toFixed(3)),
+                    p99: parseFloat((percentile(sorted, 99) / 1000).toFixed(3))
+                };
+            });
+            // 3. Make spans lightweight to completely avoid OOMs
+            const lightweightSpans = allSpans.map((s) => ({
+                traceId: s.traceId,
+                spanId: s.spanId,
+                name: s.name,
+                durationMs: s.durationMs,
+                statusCode: s.statusCode,
+                kind: s.kind,
+                startTime: s.startTime,
+                db: s.db,
+                collection: s.collection,
+                input: s.input,
+                output: s.output
+            }));
+            // 4. Update the phoenix_dashboard pre-computed snapshot
+            const dashboardData = {
+                type: 'phoenix_dashboard',
+                timestamp: new Date(),
+                source: snapshot.source ?? 'live',
+                alerts,
+                metrics: {
+                    totalTraces: allSpans.length,
+                    latencyP50: `${Math.round((snapshot.p50 ?? 0) * 1000)}ms`,
+                    latencyP99: `${(snapshot.p99 ?? 0).toFixed(1)}s`,
+                    tracesOverTime,
+                    latencyPercentiles
+                },
+                spans: lightweightSpans
+            };
+            // Remove previous dashboard cache and insert new one
+            monitoringDB.remove({ type: 'phoenix_dashboard' }, { multi: true }, function () {
+                monitoringDB.insert(dashboardData, function (err) {
+                    if (err)
+                        console.error('[PhoenixMonitor] Failed to persist pre-computed dashboard data:', err);
+                });
+            });
+        }
+        // Cleanup older phoenix metrics (keep last 24h)
         const cutoff = new Date();
         cutoff.setHours(cutoff.getHours() - 24);
         monitoringDB.remove({ type: 'phoenix', timestamp: { $lt: cutoff } }, { multi: true }, function () { });

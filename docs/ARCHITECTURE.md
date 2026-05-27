@@ -177,3 +177,24 @@ VibeMongo has eradicated the Express anti-pattern of using `req.app.locals` for 
 - **CORS** is configured to allow the frontend origin only.
 - **Agent guardrails** are enforced via the system prompt — destructive operations require explicit user confirmation.
 - **MCP subprocess** inherits the encrypted connection string at runtime; the raw URI is never logged.
+
+---
+
+## Cloud-Native Monitoring Strategy (Google Cloud Run)
+
+In modern ephemeral/serverless environments like **Google Cloud Run**, traditional Node.js persistent tickers (`setInterval`) are unreliable because instances scale down to zero when idle, pausing the event loop.
+
+To guarantee seamless, continuous telemetry synchronization and eliminate data gaps without sacrificing the cost efficiency of scale-to-zero, VibeMongo implements a **Triple-Trigger Monitoring Architecture**:
+
+### 1. Proactive Dynamic Polling (Zero Config)
+Inside the `GET /api/:conn/monitoring` and `GET /api/:conn/monitoring/phoenix` endpoints, VibeMongo performs an on-the-fly timestamp check. If the latest metrics record stored in NeDB is older than 35 seconds, the server will proactively trigger a synchronous background monitoring check before returning the data. 
+- **Benefit**: Ensures active dashboard users always see up-to-the-second live data, even immediately following a container cold start, with zero manual setup.
+
+### 2. Cloud Scheduler HTTP Webhook Trigger
+A dedicated, unauthenticated endpoint `POST /api/monitoring/trigger` has been introduced and whitelisted in the session security middleware. 
+- **Benefit**: Enables fully managed external cron tools (like **Google Cloud Scheduler**) to reliably trigger backend monitoring checks at fixed intervals (e.g. every minute) and keep the service warm.
+
+### 3. Standalone Cloud Run Job CLI Script
+A dedicated CLI script `server/src/utils/run-monitoring.ts` (runnable via `npm run monitor`) has been built. When executed, it warms up configured connection profiles, initiates OpenTelemetry instrumentation, contacts Arize Phoenix via MCP to retrieve performance spans, saves the metrics snapshot to the persistent NeDB volume, and terminates cleanly (`exit 0`).
+- **Benefit**: Designed specifically for **Cloud Run Jobs** to run to completion on a schedule, decoupling analytics aggregation from the main service.
+

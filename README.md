@@ -20,6 +20,10 @@
 
 
 ---
+## Inspiration
+Managing MongoDB databases using traditional GUI clients often involves writing complex, syntax-heavy aggregation pipelines just to get simple answers. For developers who are not MongoDB experts, writing these pipelines can be a huge time sink. Furthermore, monitoring database performance and identifying slow queries usually requires jumping into completely separate APM (Application Performance Monitoring) tools.
+
+We were inspired to build a modern, web-based admin interface that combines the robust features of traditional database clients with the power of generative AI and real-time observability. Our goal was to create a "Vibe" where managing databases feels effortless, intuitive, and conversational, while also introducing **Autonomous Database SRE** capabilities.
 
 ## 🚀 Why VibeMongo? (The Autonomous DB SRE)
 
@@ -39,6 +43,15 @@ While traditional tools like MongoDB Compass offer solid administration, **VibeM
    - Built on Vue 3 and Vite, it drops the clunky Java-like interfaces of legacy tools in favor of a sleek, glassmorphic, responsive, dark-mode native dashboard. 
 5. **Full-Stack Feature Parity**
    - Supports Document CRUD, dynamic BSON parsing, complex schema analysis, mass deletion, multi-database connection management, and comprehensive zip-based Backup & Restore workflows.
+
+## How we built it: The Tri-Partner Architecture
+
+![VibeMongo Architecture Diagram](docs/images/vibemongo_architecture_diagram.png)
+
+* **Frontend (UI/UX):** Vue 3 (Composition API) with Vite, styled with modern Element Plus and ECharts. We built a dynamic parsing engine that reads specific JSON blocks outputted by the AI agent to render interactive components on the fly.
+* **Brain (Google Cloud Agent & Gemini):** We utilized the **Google Agent Development Kit (ADK)** and Google's highly capable **Gemini 3.1 Flash-Lite** model on Vertex AI to act as the central reasoning engine.
+* **Execution (MongoDB MCP):** To bridge the AI agent with MongoDB securely, we integrated the official **MongoDB MCP Server** (`mongodb-mcp-server`). The Agent leverages this standardized Model Context Protocol to introspect schemas and execute aggregation pipelines dynamically based on the current active connection.
+* **Observability & Evaluation (Arize Phoenix Cloud & MCP):** We integrated the **Arize Phoenix MCP** and `@arizeai/phoenix-otel` to capture OpenTelemetry traces of both MongoDB operations and LLM reasoning. When the user requests an "AI Judge Evaluation" or "Ask AI to Optimize", the UI fetches the trace data and sends it back to the Gemini Agent to provide human-readable, step-by-step diagnostic feedback directly in the chat interface.
 
 ---
 

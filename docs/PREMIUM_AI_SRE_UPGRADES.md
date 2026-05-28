@@ -95,23 +95,34 @@ Generating realistic, high-fidelity mock data for staging and developer sandboxe
 
 ---
 
-## 🛡️ 5. Auto-Pilot Alerting & Webhook Notifications
+## 🛡️ 5. Auto-Pilot Alerting, SMTP Relay & Spam Prevention
 
 ### 💡 Concept
-Shift from a reactive dashboard (waiting for the user to open the UI) to a proactive monitoring environment. The background worker monitors MongoDB connection health and OTel performance traces, instantly dispatching detailed SRE Incident Reports to communication channels when anomalies arise.
+Shift from a reactive dashboard to a proactive, production-grade automated SRE monitoring suite. VibeMongo's background worker monitors database connection health, resource usage, and query performance traces. It proactively delivers rich, high-fidelity diagnostic reports straight to Webhook endpoints (Discord/Slack) and customized SMTP mail server configurations, automatically batching concurrent events to eliminate alert fatigue.
 
 ### 🛠️ Technical Architecture
+```mermaid
+graph TD
+    Monitor[SRE background polling loop - 30s] -->|1. Slow Query / Outage / Memory Spike| Aggregator[Intelligent Aggregation Buffer]
+    Aggregator -->|2. Accumulate in aggregation window| Queue[(In-Memory Queue)]
+    Queue -->|3. Window Expires e.g. 5m| Compiler[Consolidated Digest Compiler]
+    Compiler -->|4. Dispatch HTML / MD| Delivery[Webhook / SMTP Relay Channels]
+```
+
 - **Periodic Monitor Scheduler:** Express SRE worker polling local Node/OS telemetry and Arize Phoenix trace collections every 30 seconds.
-- **Anomaly Detection:** Triggers alerts when:
-  1. Latency spikes: `P99` query trace latency exceeds `1.0s` or detects slow query `COLLSCAN` patterns.
-  2. Memory spikes: Local node container memory usage exceeds `800MB` peak.
-  3. Database outages: Recurrent TCP connection failure.
-- **Outbound Webhook Dispatcher:** Formats markdown payloads and pushes them directly to Slack or Discord webhook target URLs.
+- **Unified Alert Delivery Channels**:
+  1. **Webhook Targets**: Pushes JSON-formatted markdown alert payloads to target URLs.
+  2. **SMTP Relay Channels**: Injects `nodemailer` to dispatch professionally styled HTML email reports with live database performance metrics.
+- **Intelligent Spam Prevention (Smart Alert Aggregation)**: Instead of flooding target inboxes with hundreds of sequential alerts (e.g. during a database overload), the SRE engine queues incoming incidents in an in-memory buffer. Once the aggregation window expires (customizable via 5m, 15m, 30m, or 1h), a beautifully compiled consolidated digest of all incidents is formatted and delivered.
 
 ### 🎨 Visual UI/UX & Localization
-- **File Location:** [WebhookIntegrations.vue](file:///d:/Workspace/Gits/CamHub/vibe-mongo-admin/client/src/components/monitoring/WebhookIntegrations.vue)
-- **Features:** Configuration card containing webhook targets, event type checkboxes, an active worker status toggle, and an outbound test dispatcher with a real-time console log viewer.
-- **Key Translation Keys:** `Webhook Target URL`, `Event Subscriptions (Alert Triggers)`, `COLLSCAN & Slow Query Spikes`, `Container Resource Spikes`, `Database Connection Failures`, `Disable Webhook`, `Test Webhook Channel`.
+- **File Location:** [WebhookIntegrations.vue](file:///d:/Workspace/Gits/CamHub\vibe-mongo-admin/client/src/components/monitoring/WebhookIntegrations.vue)
+- **Features**:
+  - **Dynamic `el-switch` Controllers**: Replaced basic static text badges with color-coded Element Plus switches to toggle active monitoring channels in real-time.
+  - **Custom SMTP Credential Panel**: Collapse/expand form containing server details, SSL/TLS switches, usernames, passwords, and custom sender aliases.
+  - **Smart Aggregation Configuration**: Sleek controls to toggle the Spam Prevention engine and select aggregation windows.
+  - **Terminal Activity Log**: Renders dynamic micro-animations and colored text console updates of outbound dispatches.
+- **Key Translation Keys:** `Webhook Target URL`, `Email Target Address`, `SMTP Mail Server Configuration`, `SSL/TLS Secure`, `Notification Spam Prevention (Smart Aggregation)`, `Aggregation Time Window`, `Event Subscriptions (Alert Triggers)`, `COLLSCAN & Slow Query Spikes`, `Container Resource Spikes`, `Database Connection Failures`, `Test Alert Channels`, `Save Settings`.
 
 ---
 

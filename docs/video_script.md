@@ -42,6 +42,7 @@
 * Show a red **Phoenix DB-Guardian Alert** banner indicating a slow query (`COLLSCAN`).
 * Click on **"Ask AI to Optimize"**. The Chatbot opens and the Agent explains the missing index.
 * Open a trace in the TraceDetailDrawer. Click the **"AI Judge Evaluate"** button. The Chatbot opens, explaining step-by-step the input/output and labeling it as "SAFE" or "SUBOPTIMAL".
+* Switch to the **Alert Channels** integrations panel, showing the elegant color-coded switches toggling live Webhooks, custom SMTP mail relays, and Intelligent Spam Prevention aggregation settings.
 
 **Audio (Voiceover):**
 > "But we didn't stop at queries. VibeMongo introduces **DB-Guardian**, an autonomous Site Reliability Engineer. 

@@ -1,9 +1,9 @@
 <template>
   <div class="agent-chat-wrapper" :class="{ 'is-open': store.chatSidebarOpen }">
     <!-- Floating Neon Trigger Button (Visible only when closed) -->
-    <div 
+    <div
       v-if="!store.chatSidebarOpen"
-      class="floating-chat-trigger" 
+      class="floating-chat-trigger"
       @click="toggleSidebar"
     >
       <div class="pulse-ring"></div>
@@ -24,241 +24,52 @@
             </span>
           </div>
           <div class="header-actions">
-            <el-button 
-              type="danger"
-              circle text bg
-              icon="RefreshLeft" 
+            <el-button
+              type="danger" circle text bg icon="RefreshLeft"
               :title="store.t('Clear Chat Logs')"
-              @click="handleClearChat" 
+              @click="handleClearChat"
             />
-            <el-button 
-              type="primary"
-              circle text bg
-              icon="Close" 
+            <el-button
+              type="primary" circle text bg icon="Close"
               :title="store.t('Close')"
-              @click="toggleSidebar" 
+              @click="toggleSidebar"
             />
           </div>
         </div>
 
-        <!-- Messaging Bubble Logs -->
-        <div ref="messageBox" class="chat-logs-container">
-          <div v-if="historyList.length === 0" class="welcome-box">
-            <div class="welcome-icon">🍃</div>
-            <h4>{{ store.t('Welcome to MongoDB AI') }}</h4>
-            <p>{{ store.t('I can help you query, aggregate, insert, index, or analyze MongoDB data using natural language chat.') }}</p>
-            <div class="suggestions-box">
-              <span 
-                v-for="sugg in currentSuggestions" 
-                :key="sugg" 
-                class="suggestion-tag" 
-                @click="sendSuggestion(store.t(sugg))"
-              >
-                "{{ store.t(sugg) }}"
-              </span>
-            </div>
-          </div>
+        <!-- Message List -->
+        <ChatMessageList
+          ref="messageListRef"
+          :messages="historyList"
+          :suggestions="currentSuggestions"
+          :thinking="thinking"
+          @send-suggestion="sendSuggestion"
+          @speak="speakText"
+          @navigate-db="handleNavigateDb"
+          @navigate-coll="handleNavigateColl"
+          @copy-query="copyQueryText"
+          @run-query="handleRunProposedQuery"
+          @view-trace="(id) => $router.push(`/${store.activeConnection}/monitoring?traceId=${id}`)"
+          @retry="handleRetry"
+        />
 
-          <div 
-            v-for="(msg, idx) in historyList" 
-            :key="idx"
-            class="msg-bubble-wrapper"
-            :class="msg.role"
-          >
-            <div class="bubble-avatar">{{ msg.role === 'user' ? '👤' : '🤖' }}</div>
-            <div class="bubble-body">
-              <div class="bubble-text-wrapper" style="position: relative; display: flex; align-items: flex-start; gap: 8px;">
-                <div class="bubble-text" style="flex: 1;" v-html="renderMarkdown(msg.content)"></div>
-                <el-button 
-                  v-if="msg.role === 'assistant'"
-                  circle 
-                  size="small" 
-                  icon="Headset"
-                  class="speech-tts-btn"
-                  style="opacity: 0.6; flex-shrink: 0; background: transparent; border: none; padding: 4px;"
-                  :title="store.t('Speak text')"
-                  @click="speakText(msg.content)"
-                />
-              </div>
-              
-              <!-- Dynamic ECharts Container if aggregate visual returned -->
-              <div v-if="msg.chartVisual" class="msg-chart-item-container">
-                <div class="msg-chart-container">
-                  <div :id="'chart_' + idx" class="echart-box"></div>
-                </div>
-              </div>
-
-              <!-- Structured Databases List Buttons -->
-              <div v-if="msg.databases && msg.databases.length > 0" class="db-list-buttons">
-                <div class="db-header-label">{{ store.t('Available databases:') }}</div>
-                <div class="coll-buttons-grid">
-                  <el-button 
-                    v-for="db in msg.databases" 
-                    :key="db"
-                    type="primary"
-                    round text bg
-                    size="small"
-                    @click="handleNavigateDb(db)"
-                  >
-                    📁 {{ db }}
-                  </el-button>
-                </div>
-              </div>
-
-              <!-- Structured Collections List Buttons -->
-              <div v-if="msg.collectionsInfo && msg.collectionsInfo.collections.length > 0" class="coll-list-buttons">
-                <div class="db-header-label">{{ store.t('Database:') }} <strong>{{ msg.collectionsInfo.db }}</strong></div>
-                <div class="coll-buttons-grid">
-                  <el-button 
-                    v-for="coll in msg.collectionsInfo.collections" 
-                    :key="coll"
-                    type="primary"
-                    round text bg
-                    size="small"
-                    icon="Collection"
-                    @click="handleNavigateColl(msg.collectionsInfo.db, coll)"
-                  >
-                    {{ coll }}
-                  </el-button>
-                </div>
-              </div>
-
-              <!-- Documents Table Result with MongoDB Query Viewer -->
-              <div v-if="msg.documentsResult && msg.documentsResult.documents.length > 0" class="doc-result-wrapper">
-                <DocumentResult
-                  :documents="msg.documentsResult.documents"
-                />
-              </div>
-
-              <div v-if="msg.mongoQuery" class="doc-result-wrapper">
-                <div class="chart-query-inspector">
-                  <div class="inspector-header" @click="chartQueryExpanded[idx] = !chartQueryExpanded[idx]" style="cursor: pointer;">
-                    <div class="header-left">
-                      <span class="icon">⌘</span>
-                      <span class="label">{{ store.t('View MongoDB Query') }}</span>
-                    </div>
-                    <div class="header-right">
-                      <el-button 
-                        size="small" 
-                        icon="CopyDocument" 
-                        text circle
-                        @click.stop="copyQueryText(msg.mongoQuery)" 
-                        :title="store.t('Copy query')" />
-                      <el-button 
-                        type="primary" 
-                        size="small" 
-                        icon="CaretRight" 
-                        round text style="margin-left: 0px;"
-                        @click.stop="handleRunProposedQuery(msg.mongoQuery)"
-                      >
-                        {{ store.t('Run') }}
-                      </el-button>
-                      <span class="chevron" :class="{ 'is-open': chartQueryExpanded[idx] }">›</span>
-                    </div>
-                  </div>
-                  <div v-if="chartQueryExpanded[idx]" class="inspector-body">
-                    <pre><code>{{ msg.mongoQuery }}</code></pre>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Trace Result Banner -->
-              <div v-if="msg.traceResult" class="doc-result-wrapper">
-                <el-alert
-                  type="info"
-                  show-icon
-                  :closable="false"
-                  class="trace-alert-banner"
-                >
-                  <template #title>
-                    <strong>Phoenix Trace Analysis</strong>
-                  </template>
-                  <div style="margin-top: 5px;">
-                    <span style="font-family: monospace; font-size: 0.85em; background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px;">ID: {{ msg.traceResult.traceId }}</span>
-                  </div>
-                  <div style="margin-top: 10px;">
-                    <el-button size="small" type="primary" plain @click="$router.push(`/${store.activeConnection}/monitoring?traceId=${msg.traceResult.traceId}`)">
-                      View Trace Details in Monitoring
-                    </el-button>
-                  </div>
-                </el-alert>
-              </div>
-
-              <!-- Retry Action Box if message failed -->
-              <div v-if="msg.isError" class="retry-action-box">
-                <el-button 
-                  type="warning" 
-                  size="small" 
-                  icon="RefreshLeft" 
-                  round text bg
-                  @click="handleRetry(idx)"
-                >
-                  {{ store.t('Retry') }}
-                </el-button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Typing and thinking indicator -->
-          <div v-if="thinking" class="thinking-row">
-            <div class="bubble-avatar">🤖</div>
-            <div class="thinking-indicator">
-              <div class="thinking-pulse"></div>
-              <span class="thinking-text">{{ store.t('MongoAgent is thinking...') }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Context-aware suggestions tray at the bottom (shows when chat has logs) -->
-        <div v-if="historyList.length > 0 && currentSuggestions.length > 0" class="context-suggestions-tray">
-          <el-button v-for="sugg in currentSuggestions"
-            :key="sugg"
-            type="primary"
-            round text bg size="small"
-            @click="sendSuggestion(store.t(sugg))">
-            {{ store.t(sugg) }}
-          </el-button>
-        </div>
-
-        <!-- Dynamic Voice / Text Input Box -->
-        <div class="input-panel-row">
-          <!-- Mention autocomplete popup -->
-          <div v-if="showMentionList && mentionOptions.length > 0" class="mention-list-popup">
-            <div 
-              v-for="(opt, idx) in mentionOptions" 
-              :key="idx"
-              class="mention-item"
-              :class="{ 'is-active': idx === mentionActiveIndex }"
-              @mousedown.prevent="selectMention(opt)"
-            >
-              <span class="mention-icon">{{ opt.type === 'db' ? '📁' : (opt.type === 'coll' ? '📄' : '🏷️') }}</span>
-              <span class="mention-label">{{ opt.label }}</span>
-              <span class="mention-detail">{{ opt.detail }}</span>
-            </div>
-          </div>
-
-          <el-input
-            ref="inputRef"
-            v-model="inputMsg"
-            :placeholder="store.t('Type instructions ...')"
-            class="chat-input-bar"
-            @input="handleInput"
-            @keydown="handleInputKeydown"
-            @blur="handleBlur"
-          >
-            <template #prepend>
-              <el-button 
-                :type="listening ? 'danger' : 'info'" 
-                circle 
-                icon="Microphone"
-                @click="toggleVoiceListening" 
-              />
-            </template>
-            <template #append>
-              <el-button circle icon="Promotion" @click="handleSend" />
-            </template>
-          </el-input>
-        </div>
+        <!-- Input Bar -->
+        <ChatInputBar
+          v-model="inputMsg"
+          :listening="listening"
+          :has-suggestions="historyList.length > 0 && currentSuggestions.length > 0"
+          :suggestions="currentSuggestions"
+          :show-mention-list="showMentionList"
+          :mention-options="mentionOptions"
+          :mention-active-index="mentionActiveIndex"
+          @input="handleInput"
+          @keydown="handleInputKeydown"
+          @blur="handleBlur"
+          @send="handleSend"
+          @toggle-voice="toggleVoiceListening"
+          @send-suggestion="sendSuggestion"
+          @select-mention="selectMention"
+        />
       </div>
     </aside>
   </div>
@@ -271,9 +82,9 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import axios from 'axios';
 import * as echarts from 'echarts';
-import { marked } from 'marked';
-import DocumentResult from './DocumentResult.vue';
 import { buildChartOption } from '../../utils/chartBuilder';
+import ChatMessageList from './ChatMessageList.vue';
+import ChatInputBar from './ChatInputBar.vue';
 
 const localeVoiceMap: Record<string, string> = {
   'vn': 'vi-VN',
@@ -289,23 +100,6 @@ const localeVoiceMap: Record<string, string> = {
   'ko': 'ko-KR'
 };
 
-// Customize marked renderer for code blocks
-const renderer = new marked.Renderer();
-renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
-  const language = lang || 'code';
-  // Use a base64 encoded string to safely store the code in a data attribute
-  const encodedCode = btoa(unescape(encodeURIComponent(text)));
-  return `
-    <div class="code-block-wrapper">
-      <div class="code-block-header">
-        <span class="code-lang">${language}</span>
-        <button class="global-copy-btn" data-code="${encodedCode}">📋</button>
-      </div>
-      <pre><code class="language-${language}">${text}</code></pre>
-    </div>
-  `;
-};
-marked.use({ renderer });
 
 const route = useRoute();
 const router = useRouter();
@@ -314,16 +108,12 @@ const inputMsg = ref('');
 const thinking = ref(false);
 const listening = ref(false);
 
-const inputRef = ref<any>(null);
 const showMentionList = ref(false);
 const mentionQuery = ref('');
 const mentionStartIndex = ref(-1);
 const mentionActiveIndex = ref(0);
 
 const schemaFieldsCache = reactive<Record<string, Array<{ type: 'field'; label: string; value: string; detail: string }>>>({});
-
-// Tracks which chart queries are expanded in the message logs
-const chartQueryExpanded = ref<Record<number, boolean>>({});
 
 const mentionOptions = computed(() => {
   const query = mentionQuery.value.toLowerCase().trim();
@@ -413,10 +203,8 @@ const mentionOptions = computed(() => {
 });
 
 const handleInput = (val: string) => {
-  const inputEl = inputRef.value?.$el.querySelector('input') as HTMLInputElement | null;
-  if (!inputEl) return;
-  
-  const selectionStart = inputEl.selectionStart || 0;
+  // Approximate cursor at end of string (full string value)
+  const selectionStart = val.length;
   const textBeforeCursor = val.substring(0, selectionStart);
   const lastAtIndex = textBeforeCursor.lastIndexOf('@');
   
@@ -509,9 +297,7 @@ const handleInputKeydown = (e: KeyboardEvent) => {
 const selectMention = (option: { type: 'db' | 'coll' | 'field'; label: string; value: string; detail?: string }) => {
   const text = inputMsg.value;
   const start = mentionStartIndex.value;
-  
-  const inputEl = inputRef.value?.$el.querySelector('input') as HTMLInputElement | null;
-  const cursorIdx = inputEl ? inputEl.selectionStart || 0 : text.length;
+  const cursorIdx = text.length;
   
   const insertedText = option.value + ' ';
   
@@ -525,11 +311,7 @@ const selectMention = (option: { type: 'db' | 'coll' | 'field'; label: string; v
   mentionQuery.value = '';
   
   nextTick(() => {
-    if (inputEl) {
-      inputEl.focus();
-      const newCursorPos = start + insertedText.length;
-      inputEl.setSelectionRange(newCursorPos, newCursorPos);
-    }
+    // Focus is handled by ChatInputBar internally
   });
 };
 
@@ -539,25 +321,6 @@ const handleBlur = () => {
   }, 200);
 };
 
-const renderMarkdown = (text: string) => {
-  try {
-    // Strip special metadata blocks (both tagged and untagged variants)
-    const clean = text
-      // With closing tags
-      .replace(/\[QUERY\][\s\S]*?\[\/QUERY\]/gi, '')
-      .replace(/\[NAVIGATION\][\s\S]*?\[\/NAVIGATION\]/gi, '')
-      // Without closing tags: [NAVIGATION] {...} inline (agent omits closing tag)
-      .replace(/\[NAVIGATION\]\s*\{[^}]*\}/gi, '')
-      .replace(/\[QUERY\]\s*\{[^}]*\}/gi, '')
-      // Also strip any remaining [NAVIGATION] or [QUERY] tokens without content
-      .replace(/\[NAVIGATION\]/gi, '')
-      .replace(/\[QUERY\]/gi, '')
-      .trim();
-    return marked.parse(clean, { async: false });
-  } catch (e) {
-    return text;
-  }
-};
 
 const currentSuggestions = ref<string[]>([]);
 
@@ -574,7 +337,7 @@ interface LocalMessage {
 }
 
 const historyList = ref<LocalMessage[]>([]);
-const messageBox = ref<HTMLElement | null>(null);
+const messageListRef = ref<any>(null);
 
 const updateWelcomeSuggestions = () => {
   const suggestions: string[] = [];
@@ -989,8 +752,9 @@ const renderBubbleChart = (bubbleIndex: number, chartSpec: any) => {
 
 const scrollBottom = () => {
   nextTick(() => {
-    if (messageBox.value) {
-      messageBox.value.scrollTop = messageBox.value.scrollHeight;
+    const el = messageListRef.value?.messageBox;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
     }
   });
 };

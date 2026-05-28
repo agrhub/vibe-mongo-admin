@@ -89,6 +89,10 @@ watch(() => activeCollectionName.value, (newVal) => {
   if (newVal) fetchSchema();
   else fields.value = [];
 }, { immediate: true });
+
+watch(() => store.schemaRefreshTrigger, () => {
+  fetchSchema();
+});
 </script>
 
 <style scoped>

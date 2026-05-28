@@ -2,6 +2,8 @@ import { mongoService } from '../services/MongoService';
 import { Router, Request as ExpressRequest, Response } from 'express';
 type Request = ExpressRequest<any>;
 import { collectionService } from '../services/CollectionService';
+import { mockDataService } from '../services/MockDataService';
+import { erdMapperService } from '../services/ErdMapperService';
 
 const router = Router();
 
@@ -163,6 +165,47 @@ router.post('/api/:conn/:db/:coll/ai-analysis', async function (req: Request, re
   } catch (err: any) {
     console.error('[AI Analysis] Error:', err);
     res.status(500).json({ msg: 'Error performing AI analysis: ' + (err.message || 'Unknown error') });
+  }
+});
+
+// AI Smart Mock Data Generator Endpoint
+router.post('/api/:conn/:db/:coll/generate-mock', async function (req: Request, res: Response) {
+  const connection_list = mongoService.getConnections();
+  if (!connection_list || !connection_list[req.params.conn]) {
+    return res.status(400).json({ msg: 'Invalid connection' });
+  }
+
+  const mongo_db = connection_list[req.params.conn].client.db(req.params.db);
+  const collName = req.params.coll;
+  const count = parseInt(req.body.count) || 25;
+  const locale = req.body.locale || 'en';
+  const constraints = req.body.constraints || '';
+
+  try {
+    const result = await mockDataService.generateMockData(mongo_db, collName, count, locale, constraints);
+    res.status(200).json({ msg: `Successfully generated and inserted ${result.count} mock documents!`, count: result.count });
+  } catch (err: any) {
+    console.error('[Mock Generator] Error:', err);
+    res.status(500).json({ msg: 'Error generating mock data: ' + (err.message || 'Unknown error') });
+  }
+});
+
+// AI ERD Relation Mapping Endpoint
+router.get('/api/:conn/:db/:coll/erd', async function (req: Request, res: Response) {
+  const connection_list = mongoService.getConnections();
+  if (!connection_list || !connection_list[req.params.conn]) {
+    return res.status(400).json({ msg: 'Invalid connection' });
+  }
+
+  const mongo_db = connection_list[req.params.conn].client.db(req.params.db);
+  const collName = req.params.coll;
+
+  try {
+    const erdData = await erdMapperService.mapErd(mongo_db, req.params.db, collName);
+    res.status(200).json(erdData);
+  } catch (err: any) {
+    console.error('[ERD Mapping] Error:', err);
+    res.status(500).json({ msg: 'Error generating ERD schema map: ' + (err.message || 'Unknown error') });
   }
 });
 

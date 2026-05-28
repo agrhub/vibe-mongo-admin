@@ -34,10 +34,14 @@ export const useAppStore = defineStore('app', {
     chatSidebarOpen: false,
     chatInput: '',
     chartTypeHint: '', // e.g. 'pie', 'bar', 'line' — set by Analysis "Run" button
-    autoSendNextCommand: false
+    autoSendNextCommand: false,
+    schemaRefreshTrigger: 0
   }),
 
   actions: {
+    triggerSchemaRefresh() {
+      this.schemaRefreshTrigger++;
+    },
     openChatWithCommand(command, chartType, autoSend = false) {
       this.chatSidebarOpen = true;
       this.chatInput = command;
@@ -199,8 +203,9 @@ axios.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       store.loggedIn = false;
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      const path = window.location.pathname;
+      if (path !== '/login' && path !== '/welcome' && path !== '/guide') {
+        window.location.href = '/welcome';
       }
     }
     return Promise.reject(error);

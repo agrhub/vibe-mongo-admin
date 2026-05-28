@@ -38,6 +38,8 @@ const users_js_1 = __importDefault(require("./users.js"));
 const documents_js_1 = __importDefault(require("./documents.js"));
 const monitoring_js_1 = __importDefault(require("./monitoring.js"));
 const agent_js_1 = __importDefault(require("./agent.js"));
+const webhooks_js_1 = __importDefault(require("./webhooks.js"));
+const migrations_js_1 = __importDefault(require("./migrations.js"));
 // Mount sub-routers
 router.use(auth_js_1.default);
 router.use(connections_js_1.default);
@@ -49,4 +51,6 @@ router.use(users_js_1.default);
 router.use(documents_js_1.default);
 router.use(monitoring_js_1.default);
 router.use(agent_js_1.default);
+router.use(webhooks_js_1.default);
+router.use(migrations_js_1.default);
 module.exports = router;

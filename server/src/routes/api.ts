@@ -34,6 +34,8 @@ import usersRouter from './users.js';
 import documentsRouter from './documents.js';
 import monitoringRouter from './monitoring.js';
 import agentRouter from './agent.js';
+import webhooksRouter from './webhooks.js';
+import migrationsRouter from './migrations.js';
 
 // Mount sub-routers
 router.use(authRouter);
@@ -46,5 +48,7 @@ router.use(usersRouter);
 router.use(documentsRouter);
 router.use(monitoringRouter);
 router.use(agentRouter);
+router.use(webhooksRouter);
+router.use(migrationsRouter);
 
 module.exports = router;

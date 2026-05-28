@@ -109,6 +109,11 @@
           @close-trace="activeTraceId = null"
         />
       </el-tab-pane>
+
+      <!-- Tab 4: Integrations -->
+      <el-tab-pane :label="store.t('Integrations')" name="integrations">
+        <WebhookIntegrations :conn="String(route.params.conn)" />
+      </el-tab-pane>
     </el-tabs>
 
     <TraceDetailDrawer
@@ -132,6 +137,7 @@ import PhoenixAlertBanner  from '../components/monitoring/PhoenixAlertBanner.vue
 import NodeSystemMetrics   from '../components/monitoring/NodeSystemMetrics.vue';
 import PhoenixObservability from '../components/monitoring/PhoenixObservability.vue';
 import TraceDetailDrawer   from '../components/monitoring/TraceDetailDrawer.vue';
+import WebhookIntegrations from '../components/monitoring/WebhookIntegrations.vue';
 
 const route = useRoute();
 

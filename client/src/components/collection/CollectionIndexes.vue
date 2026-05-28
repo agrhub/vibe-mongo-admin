@@ -1,12 +1,88 @@
 <template>
   <div class="collection-indexes-comp" v-loading="loading">
-    <el-card class="indexes-card">
+    <!-- AI Sanitizer Dashboard -->
+    <el-collapse-transition>
+      <div v-if="showSanitizerDashboard || sanitizerResult" class="sanitizer-dashboard-wrapper">
+        <el-card class="sanitizer-card" v-loading="sanitizing">
+          <template #header>
+            <div class="sanitizer-header">
+              <span class="ai-title">
+                <el-icon class="ai-icon"><Cpu /></el-icon>
+                AI Index Sanitizer & Diagnostics
+              </span>
+              <el-button type="success" size="small" :loading="sanitizing" @click="runIndexSanitizer">
+                {{ store.t('Run Analysis') }}
+              </el-button>
+            </div>
+          </template>
+
+          <div v-if="sanitizerResult" class="sanitizer-content">
+            <el-row :gutter="20">
+              <el-col :xs="24" :sm="8" class="health-score-col">
+                <el-progress
+                  type="circle"
+                  :percentage="sanitizerResult.healthScore"
+                  :color="getProgressColor(sanitizerResult.healthScore)"
+                  :width="120"
+                />
+                <div class="score-label">Index Health Score</div>
+                <div class="score-desc">{{ sanitizerResult.statusDescription }}</div>
+              </el-col>
+              <el-col :xs="24" :sm="16">
+                <h4 class="recommendations-title">{{ store.t('AI Recommendations & Safe Dropping') }}</h4>
+                <div v-if="sanitizerResult.recommendations.length === 0" class="no-rec-msg">
+                  <el-alert
+                    type="success"
+                    show-icon
+                    :closable="false"
+                    title="All Indexes are Optimized!"
+                    description="AI analyzed your active index paths and structural overlaps. Everything is fully optimal and healthy."
+                  />
+                </div>
+                <div v-else class="rec-list">
+                  <div
+                    v-for="rec in sanitizerResult.recommendations"
+                    :key="rec.indexName"
+                    class="rec-item"
+                    :class="`rec-level-${rec.level}`"
+                  >
+                    <div class="rec-item-header">
+                      <span class="rec-index-name">Index: <strong>{{ rec.indexName }}</strong></span>
+                      <el-tag :type="rec.level === 'danger' ? 'danger' : rec.level === 'warning' ? 'warning' : 'info'" size="small">
+                        {{ rec.level.toUpperCase() }}
+                      </el-tag>
+                    </div>
+                    <div class="rec-reason">{{ rec.reason }}</div>
+                    <div v-if="rec.safeToDrop" class="rec-actions">
+                      <el-button
+                        type="danger"
+                        plain
+                        size="small"
+                        :icon="Delete"
+                        @click="handleDropIndexWithAI(rec.indexName, rec.reason)"
+                      >
+                        {{ store.t('Drop Redundant Index') }}
+                      </el-button>
+                    </div>
+                  </div>
+                </div>
+              </el-col>
+            </el-row>
+          </div>
+          <div v-else class="sanitizer-idle-state">
+            <p>Click "Run Analysis" to let AI perform a prefix matching, analyze index usage metrics, and detect structural redundancies.</p>
+          </div>
+        </el-card>
+      </div>
+    </el-collapse-transition>
+
+    <el-card class="indexes-card" style="margin-top: 15px;">
       <template #header>
         <div class="card-header">
           <span>{{ collectionName ?? activeCollectionName }}</span>
           <div class="header-actions">
             <el-button type="success" round plain :icon="MagicStick" size="small" @click="optimizeIndexes">
-              {{ store.t('Optimize Index') }}
+              {{ store.t('AI Optimize') }}
             </el-button>
             <el-button type="primary" round text bg :icon="Plus" size="small" @click="openCreateDialog">
               {{ store.t('New Index') }}
@@ -19,6 +95,14 @@
         <el-table-column prop="name" :label="store.t('Index Name')">
           <template #default="scope">
             <strong>{{ scope.row.name }}</strong>
+            <el-tag
+              v-if="sanitizerResult?.indexStatuses?.[scope.row.name]"
+              :type="getIndexStatusType(sanitizerResult.indexStatuses[scope.row.name])"
+              size="small"
+              class="status-badge"
+            >
+              {{ sanitizerResult.indexStatuses[scope.row.name] }}
+            </el-tag>
           </template>
         </el-table-column>
 
@@ -158,7 +242,7 @@
 import { ref, reactive, watch, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { store } from '../../stores';
-import { Plus, Delete, Edit, MagicStick } from '@element-plus/icons-vue';
+import { Plus, Delete, Edit, MagicStick, Cpu } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import axios from 'axios';
 
@@ -198,10 +282,77 @@ async function loadIndexes() {
 }
 
 // ── Open dialogs ──────────────────────────────────────────────────
-const optimizeIndexes = () => {
+// AI Sanitizer state
+const sanitizerResult = ref<any>(null);
+const sanitizing = ref(false);
+const showSanitizerDashboard = ref(false);
+
+const runIndexSanitizer = async () => {
+  const { conn, db } = route.params;
   const coll = activeCollectionName.value;
-  const prompt = `Please analyze the indexes for the collection \`${coll}\`. Suggest how to optimize them to improve query performance, and show a comparison of before and after if possible.`;
-  store.openChatWithCommand(prompt, null, true);
+  if (!conn || !db || !coll) return;
+
+  sanitizing.value = true;
+  try {
+    const res = await axios.post(`/api/${conn}/${db}/${coll}/indexes/ai-sanitize`);
+    sanitizerResult.value = res.data;
+    showSanitizerDashboard.value = true;
+  } catch (e) {
+    console.error('Error running sanitizer:', e);
+    ElMessage.error(store.t('Error running AI index optimizer'));
+  } finally {
+    sanitizing.value = false;
+  }
+};
+
+const getProgressColor = (score: number) => {
+  if (score >= 90) return '#67c23a';
+  if (score >= 70) return '#e6a23c';
+  return '#f56c6c';
+};
+
+const getIndexStatusType = (status: string) => {
+  if (status === 'HEALTHY') return 'success';
+  if (status === 'REDUNDANT') return 'danger';
+  if (status === 'UNUSED') return 'warning';
+  return 'info';
+};
+
+const handleDropIndexWithAI = (indexName: string, reason: string) => {
+  ElMessageBox.confirm(
+    `AI recommends dropping index "${indexName}" because: "${reason}". Proceed to drop?`,
+    store.t('AI Confirmation'),
+    {
+      confirmButtonText: store.t('Drop Index'),
+      cancelButtonText:  store.t('Cancel'),
+      type: 'warning'
+    }
+  ).then(async () => {
+    const conn = route.params.conn || store.activeConnection;
+    const db = route.params.db || store.activeDb;
+    const coll = activeCollectionName.value;
+
+    loading.value = true;
+    try {
+      await axios.post(`/api/${conn}/${db}/${coll}/index/drop`, {
+        index_name: indexName
+      });
+      ElMessage.success(store.t('Index successfully dropped'));
+      loadIndexes();
+      runIndexSanitizer();
+    } catch (e) {
+      ElMessage.error(store.t('Error dropping index'));
+    } finally {
+      loading.value = false;
+    }
+  }).catch(() => {});
+};
+
+const optimizeIndexes = () => {
+  showSanitizerDashboard.value = !showSanitizerDashboard.value;
+  if (showSanitizerDashboard.value && !sanitizerResult.value) {
+    runIndexSanitizer();
+  }
 };
 
 const openCreateDialog = () => {
@@ -352,5 +503,107 @@ const handleDropIndex = (indexName: string) => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* AI Sanitizer Dashboard Styles */
+.sanitizer-dashboard-wrapper {
+  margin-bottom: 1.5rem;
+}
+.sanitizer-card {
+  border: 1px solid rgba(103, 194, 58, 0.2);
+}
+.sanitizer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ai-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--el-color-success);
+}
+.health-score-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border-right: 1px solid var(--el-border-color-lighter);
+  padding: 1rem;
+}
+.score-label {
+  font-weight: 600;
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+.score-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  max-width: 160px;
+  line-height: 1.3;
+}
+.recommendations-title {
+  margin: 0 0 10px 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.no-rec-msg {
+  padding: 10px 0;
+}
+.rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+.rec-item {
+  border-left: 4px solid var(--el-border-color);
+  background-color: var(--el-fill-color-blank);
+  padding: 10px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--el-border-color-light);
+  border-left-width: 4px;
+}
+.rec-level-danger {
+  border-left-color: var(--el-color-danger);
+}
+.rec-level-warning {
+  border-left-color: var(--el-color-warning);
+}
+.rec-level-info {
+  border-left-color: var(--el-color-info);
+}
+.rec-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  margin-bottom: 6px;
+}
+.rec-reason {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.3;
+  margin-bottom: 8px;
+}
+.rec-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.status-badge {
+  margin-left: 8px;
+}
+.sanitizer-idle-state {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
 }
 </style>

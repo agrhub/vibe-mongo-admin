@@ -1,14 +1,26 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { store } from '../stores';
 
+import Welcome from '../views/Welcome.vue';
 import Login from '../views/Login.vue';
 import Connections from '../views/Connections.vue';
 import DatabaseDashboard from '../views/DatabaseDashboard.vue';
 import CollectionView from '../views/CollectionView.vue';
 import DocumentEditor from '../views/DocumentEditor.vue';
 import MonitoringDashboard from '../views/MonitoringDashboard.vue';
+import Guide from '../views/Guide.vue';
 
 const routes = [
+  {
+    path: '/welcome',
+    name: 'Welcome',
+    component: Welcome
+  },
+  {
+    path: '/guide',
+    name: 'Guide',
+    component: Guide
+  },
   {
     path: '/login',
     name: 'Login',
@@ -78,8 +90,14 @@ router.beforeEach(async (to, from, next) => {
   }
 
   // Redirect logic
-  if (store.passwordRequired && !store.loggedIn && to.path !== '/login') {
-    next('/login');
+  if (to.path === '/') {
+    if (!store.loggedIn) {
+      next('/welcome');
+    } else {
+      next();
+    }
+  } else if (store.passwordRequired && !store.loggedIn && to.path !== '/login' && to.path !== '/welcome' && to.path !== '/guide') {
+    next('/welcome');
   } else if (store.loggedIn && to.path === '/login') {
     next('/');
   } else {

@@ -1,8 +1,12 @@
 <template>
   <div class="app-wrapper">
-    <!-- Full-screen login layout -->
-    <template v-if="$route.name === 'Login'">
-      <router-view />
+    <!-- Full-screen public layout -->
+    <template v-if="['Login', 'Welcome', 'Guide'].includes($route.name)">
+      <div class="public-wrapper">
+        <router-view />
+        <!-- Show chatbot on Welcome and Guide pages -->
+        <AgentChatSidebar v-if="$route.name !== 'Login' && $route.name !== 'Guide' && $route.name !== 'Welcome'" />
+      </div>
     </template>
 
     <!-- Master Dashboard Layout -->
@@ -169,6 +173,9 @@ import Sidebar from './components/Sidebar.vue';
 import AgentChatSidebar from './components/chat/AgentChatSidebar.vue';
 import { HomeFilled, ArrowRight, DataLine, SwitchButton, Location, Sunny, Moon, Monitor, Collection } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
+import { useLocale } from './hooks/useLocale';
+
+const { availableLocales, handleLocaleChange } = useLocale();
 
 const themeLabel = computed(() => {
   if (store.theme === 'light') return 'Light';
@@ -183,29 +190,16 @@ const handleThemeChange = (theme) => {
 
 const router = useRouter();
 
-const availableLocales = {
-  en: 'English',
-  de: 'Deutsch',
-  es: 'Español',
-  ru: 'Русский',
-  'zh-cn': '简体中文',
-  it: 'Italiano',
-  fa: 'فارسی',
-  vi: 'Tiếng Việt'
-};
-
 onMounted(async () => {
   // Pre-load localization dictionaries and connection details
   store.loading = true;
   await store.fetchLocales();
-  await store.fetchConnections();
+  const path = window.location.pathname;
+  if (path !== '/login' && path !== '/welcome' && path !== '/guide') {
+    await store.fetchConnections();
+  }
   store.loading = false;
 });
-
-const handleLocaleChange = (locale) => {
-  store.setLocale(locale);
-  ElMessage.success(store.t('Language changed successfully'));
-};
 
 const handleLogout = async () => {
   const result = await store.logout();
@@ -217,6 +211,7 @@ const handleLogout = async () => {
   }
 };
 </script>
+
 
 <style scoped>
 .app-wrapper {
@@ -331,5 +326,13 @@ const handleLogout = async () => {
   flex: 1;
   overflow-y: auto;
   position: relative;
+}
+
+.public-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 </style>

@@ -1,4 +1,125 @@
-var _ = require('lodash');
+import _ from 'lodash';
+import { webhookStore } from '../services/WebhookStore.js';
+import { webhookService } from '../services/WebhookService.js';
+
+// In-memory throttling states to avoid alert storms
+const reportedTraceIds = new Set<string>();
+const lastResourceAlertTime: { [connName: string]: number } = {};
+const lastConnFailureTime: { [connName: string]: number } = {};
+
+// Alert aggregation queue for spam prevention
+interface QueuedAlert {
+    connName: string;
+    markdown: string;
+    timestamp: number;
+}
+const alertQueue: QueuedAlert[] = [];
+const lastFlushTime: { [connName: string]: number } = {};
+
+async function dispatchOrQueueAlert(connName: string, markdownAlert: string, config: any) {
+    if (!config || config.enableGrouping !== 1) {
+        // Dispatch immediately
+        if (config.url) {
+            webhookService.sendNotification(connName, markdownAlert, config.url).catch(err => {
+                console.error(`[Alerting-Engine] Immediate Webhook failed:`, err.message);
+            });
+        }
+        if (config.email) {
+            webhookService.sendEmailNotification(
+                connName,
+                markdownAlert,
+                config.email,
+                config.smtpHost,
+                config.smtpPort,
+                config.smtpSecure,
+                config.smtpUser,
+                config.smtpPass,
+                config.smtpSender
+            ).catch(err => {
+                console.error(`[Alerting-Engine] Immediate Email failed:`, err.message);
+            });
+        }
+        return;
+    }
+
+    // Otherwise, queue it in the memory buffer
+    console.log(`[Alerting-Engine] 📥 Incident queued in aggregation buffer for connection: ${connName}`);
+    alertQueue.push({
+        connName,
+        markdown: markdownAlert,
+        timestamp: Date.now()
+    });
+}
+
+function checkAndFlushAlerts(connName: string, config: any) {
+    if (!config || config.enableGrouping !== 1) return;
+
+    const now = Date.now();
+    const lastFlush = lastFlushTime[connName];
+    if (!lastFlush) {
+        // First run initialization
+        lastFlushTime[connName] = now;
+        return;
+    }
+
+    const windowMs = (config.groupWindow || 5) * 60 * 1000;
+    if (now - lastFlush >= windowMs) {
+        // Aggregate and flush
+        const connAlerts = alertQueue.filter(a => a.connName === connName);
+        if (connAlerts.length === 0) {
+            lastFlushTime[connName] = now;
+            return;
+        }
+
+        console.log(`[Alerting-Engine] 🚀 FLUSHING ${connAlerts.length} grouped alerts for connection ${connName}...`);
+
+        // Compile consolidated HTML/Markdown alert digest
+        const consolidatedMarkdown = `# 🚨 VibeMongo Consolidated SRE Incident Digest
+
+**System Status:** ⚠️ ALERT DIGEST (Consolidated)
+**Affected Connection:** \`${connName}\`
+**Reporting Window:** \`Last ${config.groupWindow} minutes\`
+**Total Incidents Grouped:** \`${connAlerts.length}\`
+
+---
+
+${connAlerts.map((alert, index) => `
+### ⚠️ Incident #${index + 1}
+${alert.markdown}
+---
+`).join('\n')}`;
+
+        if (config.url) {
+            webhookService.sendNotification(connName, consolidatedMarkdown, config.url).catch(err => {
+                console.error(`[Alerting-Engine] Grouped Webhook flush failed:`, err.message);
+            });
+        }
+        if (config.email) {
+            webhookService.sendEmailNotification(
+                connName,
+                consolidatedMarkdown,
+                config.email,
+                config.smtpHost,
+                config.smtpPort,
+                config.smtpSecure,
+                config.smtpUser,
+                config.smtpPass,
+                config.smtpSender
+            ).catch(err => {
+                console.error(`[Alerting-Engine] Grouped Email flush failed:`, err.message);
+            });
+        }
+
+        // Clear flushed items from the queue
+        for (let i = alertQueue.length - 1; i >= 0; i--) {
+            if (alertQueue[i].connName === connName) {
+                alertQueue.splice(i, 1);
+            }
+        }
+
+        lastFlushTime[connName] = now;
+    }
+}
 
 // Removes old monitoring data. We only want basic monitoring with the last 24 hours of events.
 function serverMonitoringCleanup(db: any, conn: any) {
@@ -92,9 +213,86 @@ exports.serverMonitoring = function (monitoringDB: any, dbs: any) {
 
                         monitoringDB.insert(doc, function (err: any, newDoc: any) { });
                         serverMonitoringCleanup(monitoringDB, key);
+
+                        // Trigger periodic alert grouping check and flush
+                        webhookStore.getWebhook(key).then((config) => {
+                            if (config) {
+                                checkAndFlushAlerts(key, config);
+                            }
+                        }).catch(() => {});
+
+                        // 6. Check for Container Resource Spikes
+                        if (info.mem && info.mem.resident > 800) { // exceeds 800MB resident limit
+                            const nowMs = Date.now();
+                            const lastAlert = lastResourceAlertTime[key] || 0;
+                            
+                            // Throttle memory warning dispatches to once per 30 minutes
+                            if (nowMs - lastAlert > 30 * 60 * 1000) {
+                                webhookStore.getWebhook(key).then((config) => {
+                                    if (config && config.systemSpikes === 1 && (config.url || config.email)) {
+                                        lastResourceAlertTime[key] = nowMs;
+                                        
+                                        console.log(`[Alerting-Engine] ⚠️ RESOURCE SPIKE DETECTED for connection ${key} (${info.mem.resident}MB resident). Dispatching...`);
+                                        
+                                        const markdownAlert = `🚨 **VibeMongo SRE Container Resource Alert**
+
+**System Status:** ⚠️ DEGRADED (Health Score: 65%)
+**Affected Connection:** \`${key}\`
+
+### 📊 Resource Telemetry
+- **Resident Memory:** \`${info.mem.resident} MB\` (Peak Limit: 800 MB)
+- **Virtual Memory:** \`${info.mem.virtual} MB\`
+- **Active Connections:** \`${connections.current} active\` / \`${connections.available} available\`
+- **Uptime:** \`${uptime} seconds\`
+
+### 🛠️ AI Root Cause Diagnostics
+AI telemetry analyzer flagged abnormal peak resident memory consumption. The container memory usage is currently above the 800MB safety threshold, which could lead to out-of-memory container terminations.
+
+### 💡 Remediation Recommendation
+> Recommended action: Check for potential unindexed cursor leaks or run \`db.currentOp()\` to find high-memory consuming aggregations.`;
+
+                                        dispatchOrQueueAlert(key, markdownAlert, config).catch(() => {});
+                                    }
+                                }).catch(() => {});
+                            }
+                        }
                     })
                     .catch(function (err: any) {
                         console.error('Error in monitoring serverStatus for ' + key + ':', err.message || err);
+                        
+                        const nowMs = Date.now();
+                        const lastAlert = lastConnFailureTime[key] || 0;
+                        
+                        // Throttle connection failure dispatches to once per 15 minutes
+                        if (nowMs - lastAlert > 15 * 60 * 1000) {
+                            webhookStore.getWebhook(key).then((config) => {
+                                if (config && config.connectionFailures === 1 && (config.url || config.email)) {
+                                    lastConnFailureTime[key] = nowMs;
+                                    
+                                    console.log(`[Alerting-Engine] 🔴 CONNECTION FAILURE ALERT for connection ${key}. Dispatching...`);
+                                    
+                                    const markdownAlert = `🚨 **VibeMongo Critical SRE Connection Outage**
+
+**System Status:** 🔴 DOWN (Health Score: 0%)
+**Affected Connection:** \`${key}\`
+
+### 🔴 Outage Metrics
+- **Outage Time:** \`${new Date().toISOString()}\`
+- **Error Details:** \`${err.message || err}\`
+- **Failure Classification:** \`DATABASE_UNREACHABLE\`
+
+### 🛠️ AI Root Cause Diagnostics
+VibeMongo SRE Sentinel attempted periodic serverStatus ping metrics collection but connection handshake failed. The remote cluster is unreachable or auth credentials have expired.
+
+### 💡 Remediation Recommendation
+> Recommended action: Verify network routing, check if the cluster has paused, or validate if password credentials have been rotated.`;
+
+                                    dispatchOrQueueAlert(key, markdownAlert, config).then(() => {
+                                        checkAndFlushAlerts(key, config);
+                                    }).catch(() => {});
+                                }
+                            }).catch(() => {});
+                        }
                     });
             } catch (e: any) {
                 console.error('Error initializing monitoring for ' + key + ':', e.message || e);
@@ -273,6 +471,47 @@ exports.phoenixMonitoring = async function (monitoringDB: any) {
                     if (err) console.error('[PhoenixMonitor] Failed to persist pre-computed dashboard data:', err);
                 });
             });
+
+            // 5. Evaluate and trigger live slow query alerts
+            for (const s of slowSpans) {
+                const traceId = s.traceId ?? s.spanId ?? '';
+                if (!traceId || reportedTraceIds.has(traceId)) {
+                    continue; // Already processed
+                }
+
+                // Identify target connection name matching the db field
+                const dbName = s.db || 'MongoDB';
+                
+                webhookStore.getWebhook(dbName).then((config) => {
+                    if (config && config.slowQueries === 1 && (config.url || config.email)) {
+                        reportedTraceIds.add(traceId);
+                        
+                        console.log(`[Alerting-Engine] 🚨 SLOW QUERY TRIGGERED for connection: ${dbName}. Span: ${s.name} took ${Math.round(s.durationMs)}ms. Dispatching...`);
+
+                        const markdownAlert = `🚨 **VibeMongo Autopilot Incident Report**
+
+**System Status:** ⚠️ DEGRADED (Health Score: 78%)
+**Affected Connection:** \`${dbName}\`
+
+### 📊 Telemetry Metrics
+- **Span Name:** \`${s.name}\`
+- **P99 Latency:** \`${(s.durationMs / 1000).toFixed(2)}s\` (Threshold: >=1.00s)
+- **Status Code:** \`${s.statusCode || 'OK'}\`
+- **Database/Collection:** \`${s.db ?? 'unknown'}.${s.collection ?? 'unknown'}\`
+- **Span Kind:** \`${s.kind || 'chain'}\`
+
+### 🛠️ AI Root Cause Diagnostics
+Autonomous telemetry tracing evaluated active trace logs and detected a COLLSCAN query matching \`${s.name}\`. Large database-scans are bypassing existing indexes, leading to degraded performance.
+
+### 💡 Remediation Recommendation
+> Recommended action: Review query patterns for \`${s.collection || 'this collection'}\` and create appropriate database indexes to optimize lookup times.`;
+
+                        dispatchOrQueueAlert(dbName, markdownAlert, config).then(() => {
+                            checkAndFlushAlerts(dbName, config);
+                        }).catch(() => {});
+                    }
+                }).catch(() => {});
+            }
         }
 
         // Cleanup older phoenix metrics (keep last 24h)

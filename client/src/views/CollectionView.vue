@@ -13,6 +13,9 @@
         </p>
       </div>
       <div class="header-action-group">
+        <el-button type="success" :icon="Cpu" round @click="handleOpenMockDataGenerator">
+          {{ store.t('Mock Data') }}
+        </el-button>
         <el-button :icon="Download" round @click="handleExportCollection">
           {{ store.t('Export') }}
         </el-button>
@@ -137,7 +140,38 @@
             {{ store.t('Schema') }}
           </span>
         </template>
-        <CollectionSchema />
+        
+        <el-tabs v-model="schemaSubTab" type="border-card" class="schema-sub-tabs">
+          <el-tab-pane name="fields" lazy>
+            <template #label>
+              <span class="sub-tab-label">
+                <el-icon><Menu /></el-icon>
+                {{ store.t('Fields') }}
+              </span>
+            </template>
+            <CollectionSchema />
+          </el-tab-pane>
+          
+          <el-tab-pane name="erd" lazy>
+            <template #label>
+              <span class="sub-tab-label">
+                <el-icon><Connection /></el-icon>
+                {{ store.t('ERD') }}
+              </span>
+            </template>
+            <CollectionErd />
+          </el-tab-pane>
+          
+          <el-tab-pane name="migrator" lazy>
+            <template #label>
+              <span class="sub-tab-label">
+                <el-icon><Cpu /></el-icon>
+                {{ store.t('Migrator') }}
+              </span>
+            </template>
+            <CollectionTransformer />
+          </el-tab-pane>
+        </el-tabs>
       </el-tab-pane>
 
       <el-tab-pane name="analysis" lazy>
@@ -151,6 +185,70 @@
       </el-tab-pane>
 
     </el-tabs>
+
+    <!-- Premium AI Mock Data Generator Dialog -->
+    <el-dialog
+      v-model="mockDialogVisible"
+      :title="store.t('AI Smart Mock Data Generator')"
+      width="450px"
+      destroy-on-close
+      align-center
+    >
+      <div class="mock-generator-dialog-body" v-loading="mockGenerating">
+        <div class="ai-badge-row">
+          <el-tag type="success" effect="dark" size="small">
+            <el-icon style="vertical-align: middle; margin-right: 4px;"><Cpu /></el-icon>
+            AI POWERED
+          </el-tag>
+          <span class="ai-badge-text">Powered by Google Gemini</span>
+        </div>
+        <p class="mock-dialog-desc">
+          Automatically analyzes your collection's existing schema structure and samples to synthesize realistic and coherent mock documents.
+        </p>
+
+        <el-form label-position="top">
+          <el-form-item :label="store.t('Number of Documents')">
+            <el-input-number
+              v-model="mockDocCount"
+              :min="1"
+              :max="100"
+              style="width: 100%;"
+            />
+            <span class="form-item-help">Recommended max of 50 documents per AI batch execution.</span>
+          </el-form-item>
+
+          <el-form-item :label="store.t('Data Locale / Language')">
+            <el-select v-model="mockLocale" style="width: 100%;">
+              <el-option
+                v-for="(name, code) in AVAILABLE_LOCALES"
+                :key="code"
+                :label="store.t(name)"
+                :value="code"
+              />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item :label="store.t('Custom Constraints (Optional)')">
+            <el-input
+              v-model="mockConstraints"
+              type="textarea"
+              :rows="2"
+              placeholder="e.g. Set price values between 50 and 500. Generate realistic Vietnamese names."
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="mockDialogVisible = false" :disabled="mockGenerating">
+            {{ store.t('Cancel') }}
+          </el-button>
+          <el-button type="success" :loading="mockGenerating" @click="handleGenerateMockData">
+            {{ store.t('Generate Data') }}
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -158,14 +256,17 @@
 import { ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { store } from '../stores';
+import { AVAILABLE_LOCALES } from '../hooks/useLocale';
 import DocumentCard      from '../components/collection/DocumentCard.vue';
 import QueryConsole      from '../components/collection/QueryConsole.vue';
 import CollectionIndexes from '../components/collection/CollectionIndexes.vue';
 import CollectionSchema  from '../components/collection/CollectionSchema.vue';
 import CollectionAnalysis from '../components/collection/CollectionAnalysis.vue';
+import CollectionErd     from '../components/collection/CollectionErd.vue';
+import CollectionTransformer from '../components/collection/CollectionTransformer.vue';
 import DocumentTable     from '../components/collection/DocumentTable.vue';
 import BulkActionsBar    from '../components/collection/BulkActionsBar.vue';
-import { Document, Download, Plus, Compass, DocumentDelete, DataAnalysis, Menu, Tickets } from '@element-plus/icons-vue';
+import { Document, Download, Plus, Compass, DocumentDelete, DataAnalysis, Menu, Tickets, Cpu, Connection } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import axios from 'axios';
 
@@ -174,6 +275,7 @@ const router = useRouter();
 
 const loading     = ref(false);
 const activeTab   = ref('documents');
+const schemaSubTab = ref('fields');
 
 const documents   = ref([]);
 const totalDocs   = ref(0);
@@ -206,8 +308,16 @@ watch(
 watch(
   () => route.query.tab,
   (newTab) => {
-    if (newTab && ['documents', 'indexes', 'schema', 'analysis'].includes(newTab)) {
-      activeTab.value = newTab;
+    if (newTab) {
+      if (['documents', 'indexes', 'schema', 'analysis'].includes(newTab)) {
+        activeTab.value = newTab;
+      } else if (newTab === 'erd') {
+        activeTab.value = 'schema';
+        schemaSubTab.value = 'erd';
+      } else if (newTab === 'transformer' || newTab === 'migrator') {
+        activeTab.value = 'schema';
+        schemaSubTab.value = 'migrator';
+      }
     }
   },
   { immediate: true }
@@ -417,6 +527,41 @@ const handleMassDelete = () => {
     }
   }).catch(() => {});
 };
+
+// AI Mock Data Logic
+const mockDialogVisible = ref(false);
+const mockGenerating = ref(false);
+const mockDocCount = ref(25);
+const mockLocale = ref(store.activeLocale || 'en');
+const mockConstraints = ref('');
+
+const handleOpenMockDataGenerator = () => {
+  mockDocCount.value = 25;
+  mockLocale.value = store.activeLocale || 'en';
+  mockConstraints.value = '';
+  mockDialogVisible.value = true;
+};
+
+const handleGenerateMockData = async () => {
+  mockGenerating.value = true;
+  try {
+    const { conn, db, coll } = route.params;
+    const res = await axios.post(`/api/${conn}/${db}/${coll}/generate-mock`, {
+      count: mockDocCount.value,
+      locale: mockLocale.value,
+      constraints: mockConstraints.value
+    });
+    ElMessage.success(res.data.msg || store.t('Mock documents successfully generated'));
+    mockDialogVisible.value = false;
+    loadDocuments();
+    store.fetchSidebar();
+  } catch (e) {
+    console.error(e);
+    ElMessage.error(e.response?.data?.msg || store.t('Error generating mock data'));
+  } finally {
+    mockGenerating.value = false;
+  }
+};
 </script>
 
 <style scoped>
@@ -497,6 +642,34 @@ const handleMassDelete = () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
+}
+
+/* AI Mock Data styles */
+.mock-generator-dialog-body {
+  padding: 8px 4px;
+}
+.ai-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0.75rem;
+}
+.ai-badge-text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.mock-dialog-desc {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 1.5rem;
+}
+.form-item-help {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 4px;
 }
 
 </style>

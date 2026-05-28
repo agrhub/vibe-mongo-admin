@@ -1,6 +1,7 @@
 import { mongoService } from '../services/MongoService';
 import { Router, Request as ExpressRequest, Response } from 'express';
 type Request = ExpressRequest<any>;
+import { indexSanitizerService } from '../services/IndexSanitizerService';
 
 const router = Router();
 
@@ -94,6 +95,27 @@ router.post('/api/:conn/:db/:coll/index/drop', function (req: Request, res: Resp
             console.error('Error dropping Index: ' + err);
             res.status(400).json({ 'msg': 'Error dropping Index' + ': ' + err });
         });
+});
+
+// AI Index Sanitizer Endpoint
+router.post('/api/:conn/:db/:coll/indexes/ai-sanitize', async function (req: Request, res: Response) {
+    const connection_list = mongoService.getConnections();
+    if (!connection_list || !connection_list[req.params.conn]) {
+        return res.status(400).json({ msg: 'Invalid connection' });
+    }
+
+    const mongo_db = connection_list[req.params.conn].client.db(req.params.db);
+    const collName = req.params.coll;
+
+    try {
+        // Fetch active indexes first
+        const activeIndexes = await mongo_db.collection(collName).indexes();
+        const result = await indexSanitizerService.sanitizeIndexes(mongo_db, collName, activeIndexes);
+        res.status(200).json(result);
+    } catch (err: any) {
+        console.error('[Index AI Sanitize] Error:', err);
+        res.status(500).json({ msg: 'Error performing AI index sanitization: ' + (err.message || 'Unknown error') });
+    }
 });
 
 export default router;

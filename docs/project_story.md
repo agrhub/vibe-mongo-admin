@@ -14,6 +14,9 @@ The standout features are driven by our AI architecture:
 3. **Ask AI to Optimize & AI Judge Evaluate**: Users can click to have the Google Cloud Agent analyze a slow trace waterfall, explain the bottleneck step-by-step in natural language, and suggest optimizations (like adding indexes) or evaluate the safety of the query.
 
 ## How we built it: The Tri-Partner Architecture
+
+![VibeMongo Architecture Diagram](images/vibemongo_architecture_diagram.png)
+
 * **Frontend (UI/UX):** Vue 3 (Composition API) with Vite, styled with modern, glassmorphic UI patterns. We built a dynamic parsing engine that reads specific JSON blocks outputted by the AI agent to render interactive components on the fly.
 * **Brain (Google Cloud Agent & Gemini):** We utilized the **Google Agent Development Kit (ADK)** and Google's highly capable **Gemini 3.1 Flash-Lite** model on Vertex AI to act as the central reasoning engine.
 * **Execution (MongoDB MCP):** To bridge the AI agent with MongoDB securely, we integrated the official **MongoDB MCP Server** (`mongodb-mcp-server`). The Agent leverages this standardized Model Context Protocol to introspect schemas and execute aggregation pipelines dynamically based on the current active connection.

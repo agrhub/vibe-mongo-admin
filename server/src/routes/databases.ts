@@ -3,6 +3,7 @@ import { Router, Request as ExpressRequest, Response } from 'express';
 type Request = ExpressRequest<any>;
 import * as common from './common.js';
 import { databaseService } from '../services/DatabaseService';
+import { erdMapperService } from '../services/ErdMapperService';
 
 const router = Router();
 
@@ -165,6 +166,24 @@ router.post('/api/:conn/:db/ai-analysis', async function (req: Request, res: Res
     } catch (e: any) {
         console.error('AI Database Analysis Error:', e);
         res.status(500).json({ msg: e.message || 'Internal error' });
+    }
+});
+
+// Database-wide ERD Relation Mapping Endpoint
+router.get('/api/:conn/:db/erd', async function (req: Request, res: Response) {
+    const connection_list = mongoService.getConnections();
+    if (!connection_list || !connection_list[req.params.conn]) {
+        return res.status(400).json({ 'msg': 'Invalid connection name' });
+    }
+
+    const mongo_db = connection_list[req.params.conn].client.db(req.params.db);
+
+    try {
+        const erdData = await erdMapperService.mapDatabaseErd(mongo_db, req.params.db);
+        res.status(200).json(erdData);
+    } catch (err: any) {
+        console.error('[Database ERD Mapping] Error:', err);
+        res.status(500).json({ msg: 'Error generating Database ERD: ' + (err.message || 'Unknown error') });
     }
 });
 

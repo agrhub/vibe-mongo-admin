@@ -228,6 +228,11 @@
       <el-tab-pane :label="store.t('Analysis')" name="analysis">
         <DatabaseAnalysis />
       </el-tab-pane>
+
+      <!-- ERD Tab -->
+      <el-tab-pane :label="store.t('ERD')" name="erd" lazy>
+        <DatabaseErd />
+      </el-tab-pane>
     </el-tabs>
 
     <!-- New Collection dialog -->
@@ -356,6 +361,7 @@ import axios from 'axios';
 import CollectionSchema from '../collection/CollectionSchema.vue';
 import CollectionIndexes from '../collection/CollectionIndexes.vue';
 import DatabaseAnalysis from './DatabaseAnalysis.vue';
+import DatabaseErd from './DatabaseErd.vue';
 
 const route = useRoute();
 const loading = ref(false);

@@ -37,6 +37,7 @@ const MongoService_1 = require("../services/MongoService");
 const express_1 = require("express");
 const common = __importStar(require("./common.js"));
 const DatabaseService_1 = require("../services/DatabaseService");
+const ErdMapperService_1 = require("../services/ErdMapperService");
 const router = (0, express_1.Router)();
 // ================= CONNECTION STATUS & DATABASES =================
 // Database status & backup list
@@ -174,6 +175,22 @@ router.post('/api/:conn/:db/ai-analysis', async function (req, res) {
     catch (e) {
         console.error('AI Database Analysis Error:', e);
         res.status(500).json({ msg: e.message || 'Internal error' });
+    }
+});
+// Database-wide ERD Relation Mapping Endpoint
+router.get('/api/:conn/:db/erd', async function (req, res) {
+    const connection_list = MongoService_1.mongoService.getConnections();
+    if (!connection_list || !connection_list[req.params.conn]) {
+        return res.status(400).json({ 'msg': 'Invalid connection name' });
+    }
+    const mongo_db = connection_list[req.params.conn].client.db(req.params.db);
+    try {
+        const erdData = await ErdMapperService_1.erdMapperService.mapDatabaseErd(mongo_db, req.params.db);
+        res.status(200).json(erdData);
+    }
+    catch (err) {
+        console.error('[Database ERD Mapping] Error:', err);
+        res.status(500).json({ msg: 'Error generating Database ERD: ' + (err.message || 'Unknown error') });
     }
 });
 exports.default = router;

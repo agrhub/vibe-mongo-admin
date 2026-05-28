@@ -9,6 +9,7 @@
 
 | Document | Description |
 |----------|-------------|
+| [Premium AI SRE Upgrades](./docs/PREMIUM_AI_SRE_UPGRADES.md) | **[NEW]** Deep-dive into Schema Migrator, ERD, Webhooks, Index Sanitizer, and Mock Gen |
 | [Architecture Overview](./docs/ARCHITECTURE.md) | System design, component diagram, and data flow |
 | [Client Guide](./docs/CLIENT.md) | Vue 3 frontend — setup, structure, and configuration |
 | [Backend Guide](./docs/BACKEND.md) | Express API + Google ADK Agent — setup, structure, and configuration |
@@ -16,6 +17,7 @@
 | [Deploy — Cloud Run](./docs/DEPLOY_CLOUD_RUN.md) | Step-by-step deploy to Google Cloud Run |
 | [Deploy — Cloud Agent](./docs/DEPLOY_CLOUD_AGENT.md) | Deploy the AI Agent as a Google Cloud Agent Engine service |
 | [Workflow Diagrams](./docs/WORKFLOWS.md) | Detailed sequence diagrams: VibeMongo ↔ ADK ↔ MCP ↔ MongoDB |
+
 
 ---
 
@@ -212,7 +214,12 @@ pnpm run dev
 - **Name:** Minh Truong
 - **Email:** camtruong512@gmail.com
 - **GitHub:** [camtruong512](https://github.com/camtruong512)
-- **LinkedIn:** [Minh Truong](https://www.linkedin.com/in/cam-minh-truong-367248ab)
+
+## 👤 Supporter
+
+- **Name:** Tan Do
+- **Email:** dmtan90@gmail.com
+- **GitHub:** [dmtan90](https://github.com/dmtan90)
 
 ---
 

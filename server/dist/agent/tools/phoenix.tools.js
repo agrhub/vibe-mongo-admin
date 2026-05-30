@@ -203,13 +203,73 @@ async function runAgentEvaluation(traceId) {
     const client = await getPhoenixMcpClient();
     const projectName = process.env.PHOENIX_PROJECT_NAME || 'vibe-mongo-admin';
     let traceDetails = 'Trace details unavailable.';
-    if (client) {
+    // Check if it's one of the simulated slow queries or mock spans
+    const simulatedQueries = [
+        {
+            traceId: 'span-98124a',
+            db: 'sample_mflix',
+            collection: 'comments',
+            operation: 'find',
+            filter: '{"movie_id": {"$oid": "573a1390f293160aaa410519"}}',
+            durationMs: 2150,
+            frequencyPerMin: 45
+        },
+        {
+            traceId: 'span-98125b',
+            db: 'sample_mflix',
+            collection: 'movies',
+            operation: 'find',
+            filter: '{"year": {"$lt": 1990}, "genres": "Drama"}',
+            durationMs: 1820,
+            frequencyPerMin: 12
+        }
+    ];
+    const foundSimulated = simulatedQueries.find(q => q.traceId === traceId);
+    if (foundSimulated) {
+        traceDetails = JSON.stringify(foundSimulated);
+    }
+    else if (traceId.startsWith('t-mock-trace-')) {
+        const idx = parseInt(traceId.replace('t-mock-trace-', '')) - 100000;
+        const ops = [
+            { name: 'find', db: 'sample_mflix', coll: 'movies', input: '{"year": {"$lt": 1990}, "genres": "Drama"}', latency: 220 },
+            { name: 'aggregate', db: 'sample_airbnb', coll: 'listingsAndReviews', input: '[{"$match": {"room_type": "Entire home/apt"}}, {"$group": {"_id": "$address.country", "avgPrice": {"$avg": "$price"}}}]', latency: 2269 },
+            { name: 'stats', db: 'sample_airbnb', coll: '', input: '{"dbStats": 1}', latency: 2150 },
+            { name: 'mongodb.aggregate', db: 'sample_geospatial', coll: 'shipwrecks', input: '[{"$match": {"coordinates": {"$geoWithin": {"$centerSphere": [[-73.935242, 40.73061], 0.1]}}}}]', latency: 2100 },
+            { name: 'find', db: 'sample_mflix', coll: 'comments', input: '{"movie_id": {"$oid": "573a1390f293160aaa410519"}}', latency: 45 },
+            { name: 'insertOne', db: 'sample_supplies', coll: 'sales', input: '{"storeLocation": "Denver", "items": [{"name": "binder", "tags": ["office"]}]}', latency: 120 },
+            { name: 'updateOne', db: 'sample_analytics', coll: 'accounts', input: '{"account_id": 371138}, {"$set": {"limit": 10000}}', latency: 280 },
+            { name: 'deleteMany', db: 'sample_training', coll: 'grades', input: '{"student_id": {"$gt": 10000}}', latency: 740 },
+            { name: 'gemini.generateText', db: '', coll: '', input: '{"model": "gemini-3.1-flash-lite", "prompt": "Analyze database health..."}', latency: 1540, kind: 'llm', tokens: 840 },
+            { name: 'getServerStatus', db: 'admin', coll: '', input: '{"serverStatus": 1}', latency: 85 }
+        ];
+        if (idx >= 0 && idx < 100) {
+            const op = ops[idx % ops.length];
+            traceDetails = JSON.stringify({
+                traceId,
+                spanId: `s-mock-span-${200000 + idx}`,
+                name: op.name,
+                durationMs: op.latency,
+                statusCode: 'OK',
+                db: op.db,
+                collection: op.coll,
+                input: op.input
+            });
+        }
+    }
+    // Fallback to live MCP fetch if available and details not resolved yet
+    if (traceDetails === 'Trace details unavailable.' && client) {
         try {
             const tools = await listPhoenixTools();
             if (tools.includes('get-trace')) {
-                const trace = await callPhoenixTool('get-trace', { project_identifier: projectName, trace_id: traceId });
-                if (trace)
+                // Try camelCase parameter naming first
+                let trace = await callPhoenixTool('get-trace', { projectIdentifier: projectName, traceId: traceId });
+                if (!trace) {
+                    // Try snake_case parameter naming second
+                    trace = await callPhoenixTool('get-trace', { project_identifier: projectName, trace_id: traceId });
+                }
+                if (trace) {
                     traceDetails = JSON.stringify(trace).substring(0, 4000); // cap at 4000 chars for prompt
+                }
             }
         }
         catch (e) {

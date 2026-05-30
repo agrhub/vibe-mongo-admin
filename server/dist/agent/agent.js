@@ -61,6 +61,7 @@ async function chatWithAgent(userId, message, context) {
         let navigation = null;
         let documentsResult;
         let traceResult = undefined;
+        let refreshRequired = false;
         for await (const event of eventGenerator) {
             const textParts = event.content?.parts?.map((p) => p.text).filter(Boolean) || [];
             if (textParts.length > 0) {
@@ -68,6 +69,18 @@ async function chatWithAgent(userId, message, context) {
             }
             const responses = (0, adk_1.getFunctionResponses)(event);
             for (const resp of responses) {
+                if (resp.name && [
+                    'insertOneDocument',
+                    'updateOneDocument',
+                    'deleteOneDocument',
+                    'createIndex',
+                    'deleteIndex',
+                    'addConnection',
+                    'updateConnection',
+                    'deleteConnection'
+                ].includes(resp.name)) {
+                    refreshRequired = true;
+                }
                 if (resp.response && resp.response.chartVisual) {
                     chartVisual = resp.response.chartVisual;
                 }
@@ -208,7 +221,8 @@ async function chatWithAgent(userId, message, context) {
             collectionsInfo,
             documentsResult,
             mongoQuery,
-            traceResult
+            traceResult,
+            refreshRequired
         };
     }, {
         name: 'chatWithAgent',

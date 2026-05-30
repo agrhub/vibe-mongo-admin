@@ -10,7 +10,7 @@
                 <el-icon class="ai-icon"><Cpu /></el-icon>
                 AI Index Sanitizer & Diagnostics
               </span>
-              <el-button type="success" size="small" :loading="sanitizing" @click="runIndexSanitizer">
+              <el-button type="success" size="small" round :loading="sanitizing" @click="runIndexSanitizer">
                 {{ store.t('Run Analysis') }}
               </el-button>
             </div>
@@ -56,7 +56,7 @@
                     <div v-if="rec.safeToDrop" class="rec-actions">
                       <el-button
                         type="danger"
-                        plain
+                        plain round
                         size="small"
                         :icon="Delete"
                         @click="handleDropIndexWithAI(rec.indexName, rec.reason)"
@@ -263,6 +263,14 @@ const activeCollectionName = computed(() => props.collectionName || store.active
 watch(() => [route.params.conn, route.params.db, activeCollectionName.value], () => {
   loadIndexes();
 }, { immediate: true });
+
+// Reload indexes on global data refresh trigger
+watch(
+  () => store.dataRefreshTrigger,
+  () => {
+    loadIndexes();
+  }
+);
 
 // ── Load ──────────────────────────────────────────────────────────
 async function loadIndexes() {

@@ -126,7 +126,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { store } from '../stores';
 import { ElMessage } from 'element-plus';
@@ -241,6 +241,22 @@ function handleAnalyze(traceId) {
   openSpan({ traceId, spanId: traceId, name: traceId, durationMs: 0, kind: 'chain' });
 }
 
+// Watch route query parameters to dynamically adjust tab and trace drawer
+watch(
+  () => [route.query.tab, route.query.traceId],
+  ([newTab, newTraceId]) => {
+    if (newTab) {
+      activeTab.value = newTab;
+    }
+    if (newTraceId) {
+      activeTraceId.value = newTraceId;
+      activeTab.value = 'traces';
+      handleAnalyze(newTraceId);
+    }
+  },
+  { immediate: true }
+);
+
 function handleFilterChange(filters) {
   activeFilters.value = filters;
   tracesCurrentPage.value = 1;
@@ -302,6 +318,10 @@ async function fetchPhoenixHealth(search = '', status = '', kind = '') {
           db:         q.db,
           collection: q.collection,
         }));
+      }
+
+      if (activeTraceId.value) {
+        handleAnalyze(activeTraceId.value);
       }
     }
   } catch (e) {

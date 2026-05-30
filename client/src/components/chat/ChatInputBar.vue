@@ -87,9 +87,14 @@ defineExpose({ inputRef });
 
 .context-suggestions-tray {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  padding-bottom: 0.25rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 5px;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+.context-suggestions-tray::-webkit-scrollbar {
+  display: none;
 }
 
 .mention-list-popup {

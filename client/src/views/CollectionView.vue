@@ -323,6 +323,14 @@ watch(
   { immediate: true }
 );
 
+// Reload documents on global data refresh trigger
+watch(
+  () => store.dataRefreshTrigger,
+  () => {
+    loadDocuments();
+  }
+);
+
 const copyDocWithoutId = (doc) => {
   const { _id, ...rest } = doc;
   navigator.clipboard.writeText(JSON.stringify(rest, null, 2));

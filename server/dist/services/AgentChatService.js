@@ -17,7 +17,7 @@ class AgentChatService {
                 timestamp: Date.now()
             });
             // Invoke the imported chatWithAgent function from the sibling agent workspace
-            const { message: responseMessage, chartVisual, navigation, suggestions, databases, collectionsInfo, documentsResult, mongoQuery } = await (0, agent_1.chatWithAgent)(userId, message, context);
+            const { message: responseMessage, chartVisual, navigation, suggestions, databases, collectionsInfo, documentsResult, mongoQuery, refreshRequired, traceResult } = await (0, agent_1.chatWithAgent)(userId, message, context);
             // Force chart type if hint was passed from Analysis UI
             if (context?.chartTypeHint && chartVisual) {
                 chartVisual.type = context.chartTypeHint;
@@ -33,6 +33,7 @@ class AgentChatService {
                 collectionsInfo,
                 documentsResult,
                 mongoQuery,
+                traceResult,
                 timestamp: Date.now()
             });
             console.log(`[AgentChatService] Finished chat response: "${responseMessage.substring(0, 100)}..."`);
@@ -44,7 +45,9 @@ class AgentChatService {
                 databases,
                 collectionsInfo,
                 documentsResult,
-                mongoQuery
+                mongoQuery,
+                refreshRequired,
+                traceResult
             };
         }
         catch (err) {

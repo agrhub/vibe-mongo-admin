@@ -222,17 +222,15 @@ pnpm run dev
 
 ---
 
-## 👤 Project Owner
+## 👤 Developer
 
 - **Name:** Minh Truong
-- **Email:** camtruong512@gmail.com
-- **GitHub:** [camtruong512](https://github.com/camtruong512)
+- **GitHub:** [@camtruong512](https://github.com/camtruong512)
 
 ## 👤 Supporter
 
 - **Name:** Tan Do
-- **Email:** dmtan90@gmail.com
-- **GitHub:** [dmtan90](https://github.com/dmtan90)
+- **GitHub:** [@dmtan90](https://github.com/dmtan90)
 
 ---
 

@@ -35,12 +35,16 @@ export const useAppStore = defineStore('app', {
     chatInput: '',
     chartTypeHint: '', // e.g. 'pie', 'bar', 'line' — set by Analysis "Run" button
     autoSendNextCommand: false,
-    schemaRefreshTrigger: 0
+    schemaRefreshTrigger: 0,
+    dataRefreshTrigger: 0
   }),
 
   actions: {
     triggerSchemaRefresh() {
       this.schemaRefreshTrigger++;
+    },
+    triggerDataRefresh() {
+      this.dataRefreshTrigger++;
     },
     openChatWithCommand(command, chartType, autoSend = false) {
       this.chatSidebarOpen = true;

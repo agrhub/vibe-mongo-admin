@@ -11,6 +11,7 @@ interface ChatMessage {
   collectionsInfo?: any;
   documentsResult?: any;
   mongoQuery?: string;
+  traceResult?: any;
 }
 
 export class AgentChatService {
@@ -34,6 +35,8 @@ export class AgentChatService {
     collectionsInfo?: { db: string; collections: string[] };
     documentsResult?: { query: string; documents: any[] };
     mongoQuery?: string;
+    refreshRequired?: boolean;
+    traceResult?: any;
   }> {
     try {
       console.log(`[AgentChatService] Received chat request from user: ${userId}. Message: "${message}"`);
@@ -57,7 +60,9 @@ export class AgentChatService {
         databases, 
         collectionsInfo, 
         documentsResult,
-        mongoQuery
+        mongoQuery,
+        refreshRequired,
+        traceResult
       } = await chatWithAgent(userId, message, context);
 
       // Force chart type if hint was passed from Analysis UI
@@ -76,6 +81,7 @@ export class AgentChatService {
         collectionsInfo,
         documentsResult,
         mongoQuery,
+        traceResult,
         timestamp: Date.now()
       });
 
@@ -89,7 +95,9 @@ export class AgentChatService {
         databases,
         collectionsInfo,
         documentsResult,
-        mongoQuery
+        mongoQuery,
+        refreshRequired,
+        traceResult
       };
     } catch (err: any) {
       console.error('[AgentChatService] Error during chat session:', err);

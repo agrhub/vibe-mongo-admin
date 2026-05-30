@@ -85,7 +85,7 @@
             <div class="inspector-header" @click="queryExpanded[idx] = !queryExpanded[idx]" style="cursor: pointer;">
               <div class="header-left">
                 <span class="icon">⌘</span>
-                <span class="label">{{ store.t('View MongoDB Query') }}</span>
+                <span class="label">{{ store.t('View Query') }}</span>
               </div>
               <div class="header-right">
                 <el-button size="small" icon="CopyDocument" text circle @click.stop="emit('copy-query', msg.mongoQuery)" :title="store.t('Copy query')" />
@@ -103,19 +103,19 @@
 
         <!-- Trace result banner -->
         <div v-if="msg.traceResult" class="doc-result-wrapper">
-          <el-alert type="info" show-icon :closable="false" class="trace-alert-banner">
-            <template #title><strong>Phoenix Trace Analysis</strong></template>
-            <div style="margin-top: 5px;">
-              <span style="font-family: monospace; font-size: 0.85em; background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px;">
-                ID: {{ msg.traceResult.traceId }}
-              </span>
+          <div class="chart-query-inspector">
+            <div class="inspector-header">
+              <div class="header-left">
+                <span class="icon"><el-icon><Link /></el-icon></span>
+                <span class="label">{{ store.t('Trace') + ': ...' + msg.traceResult.traceId.slice(-10) }}</span>
+              </div>
+              <div class="header-right">
+                <el-button type="primary" size="small" icon="CaretRight" round text style="margin-left: 0px;" @click.stop="emit('view-trace', msg.traceResult.traceId)">
+                  {{ store.t('View Trace') }}
+                </el-button>
+              </div>
             </div>
-            <div style="margin-top: 10px;">
-              <el-button size="small" type="primary" plain @click="emit('view-trace', msg.traceResult.traceId)">
-                View Trace Details in Monitoring
-              </el-button>
-            </div>
-          </el-alert>
+          </div>
         </div>
 
         <!-- Retry button -->
@@ -315,6 +315,10 @@ const renderMarkdown = (text: string) => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+}
+
+.coll-buttons-grid .el-button+.el-button {
+	margin-left: 0px;
 }
 
 .doc-result-wrapper { width: 100%; }

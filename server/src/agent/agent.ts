@@ -44,6 +44,8 @@ export async function chatWithAgent(
   collectionsInfo?: { db: string; collections: string[] };
   documentsResult?: { query: string; documents: any[] };
   mongoQuery?: string;
+  refreshRequired?: boolean;
+  traceResult?: any;
 }> {
   const { withSpan } = require('@arizeai/phoenix-otel');
   
@@ -86,6 +88,7 @@ export async function chatWithAgent(
       let navigation: any = null;
       let documentsResult: { query: string; documents: any[] } | undefined;
       let traceResult: any = undefined;
+      let refreshRequired = false;
 
       for await (const event of eventGenerator) {
         const textParts = event.content?.parts?.map((p: any) => p.text).filter(Boolean) || [];
@@ -95,6 +98,18 @@ export async function chatWithAgent(
 
         const responses = getFunctionResponses(event);
         for (const resp of responses) {
+          if (resp.name && [
+            'insertOneDocument',
+            'updateOneDocument',
+            'deleteOneDocument',
+            'createIndex',
+            'deleteIndex',
+            'addConnection',
+            'updateConnection',
+            'deleteConnection'
+          ].includes(resp.name)) {
+            refreshRequired = true;
+          }
           if (resp.response && (resp.response as any).chartVisual) {
             chartVisual = (resp.response as any).chartVisual;
           }
@@ -236,7 +251,8 @@ export async function chatWithAgent(
         collectionsInfo,
         documentsResult,
         mongoQuery,
-        traceResult
+        traceResult,
+        refreshRequired
       };
     },
     {

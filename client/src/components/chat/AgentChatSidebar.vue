@@ -492,6 +492,48 @@ const toggleVoiceListening = () => {
   recognition.start();
 };
 
+const isNavValid = (nav: any) => {
+  if (!nav) return false;
+
+  // Prevent routing to raw unresolved parameter strings
+  if (nav.path && (nav.path.includes(':connectionName') || nav.path.includes(':databaseName') || nav.path.includes(':collectionName'))) {
+    return false;
+  }
+  if (nav.route && (nav.route.includes(':connectionName') || nav.route.includes(':databaseName') || nav.route.includes(':collectionName'))) {
+    return false;
+  }
+
+  // Monitoring dashboard routes are always valid
+  if (nav.route === 'monitoring' || nav.path === 'monitoring' || nav.route?.includes('monitoring') || nav.path?.includes('monitoring')) {
+    return true;
+  }
+
+  // Validate database and collection against loaded sidebar explorer
+  const dbs = Object.keys(store.sidebarList || {});
+  if (dbs.length > 0) {
+    if (nav.db) {
+      if (!dbs.includes(nav.db)) {
+        console.warn(`[AI Navigation Validation] Invalid database: "${nav.db}"`);
+        return false;
+      }
+      if (nav.collection) {
+        const collections = (store.sidebarList as any)[nav.db] || [];
+        if (!collections.includes(nav.collection)) {
+          console.warn(`[AI Navigation Validation] Invalid collection: "${nav.collection}" under database "${nav.db}"`);
+          return false;
+        }
+      }
+    }
+  }
+
+  // Standalone collections without database context are invalid
+  if (nav.collection && !nav.db) {
+    return false;
+  }
+
+  return !!(nav.db || nav.route || nav.path);
+};
+
 const sendChat = async (userText: string, skipAppendUser = false) => {
   if (thinking.value) return;
   
@@ -527,6 +569,8 @@ const sendChat = async (userText: string, skipAppendUser = false) => {
     const databases = res.data.databases;
     const collectionsInfo = res.data.collectionsInfo;
     const documentsResult = res.data.documentsResult;
+    const refreshRequired = res.data.refreshRequired;
+    const traceResult = res.data.traceResult;
 
     // Check if response is empty
     if (!assistantMsg || !assistantMsg.trim()) {
@@ -537,6 +581,12 @@ const sendChat = async (userText: string, skipAppendUser = false) => {
       currentSuggestions.value = suggestions;
     }
 
+    // Trigger reactive data reload if requested by backend tool execution
+    if (refreshRequired) {
+      store.triggerDataRefresh();
+      store.fetchSidebar();
+    }
+
     // Append AI bubble
     const index = historyList.value.push({ 
       role: 'assistant', 
@@ -545,7 +595,8 @@ const sendChat = async (userText: string, skipAppendUser = false) => {
       databases: databases,
       collectionsInfo: collectionsInfo,
       documentsResult: documentsResult,
-      mongoQuery: res.data.mongoQuery
+      mongoQuery: res.data.mongoQuery,
+      traceResult: traceResult
     }) - 1;
 
     scrollBottom();
@@ -557,20 +608,42 @@ const sendChat = async (userText: string, skipAppendUser = false) => {
     }
 
     // 2. Process automatic page routing if triggered by agent
-    if (navTrigger && route.name !== 'Monitoring') {
+    if (navTrigger) {
+      if (isNavValid(navTrigger)) {
+        const connName = store.activeConnection;
+        if (connName) {
+          if (navTrigger.route === 'monitoring' || navTrigger.path === 'monitoring' || navTrigger.route?.includes('monitoring') || navTrigger.path?.includes('monitoring')) {
+            const query: any = { tab: navTrigger.tab || 'traces' };
+            if (navTrigger.traceId) {
+              query.traceId = navTrigger.traceId;
+            }
+            router.push({
+              path: `/${connName}/monitoring`,
+              query
+            });
+          } else if (navTrigger.db && navTrigger.collection) {
+            router.push({
+              path: `/${connName}/${navTrigger.db}/${navTrigger.collection}`,
+              query: navTrigger.tab ? { tab: navTrigger.tab } : {}
+            });
+          } else if (navTrigger.db) {
+            router.push({
+              path: `/${connName}/${navTrigger.db}`,
+              query: navTrigger.tab ? { tab: navTrigger.tab } : {}
+            });
+          }
+        }
+      } else {
+        console.warn('[AgentChatSidebar] Blocked invalid/hallucinated navigation payload:', navTrigger);
+      }
+    } else if (traceResult && traceResult.traceId) {
+      // Auto-navigate to monitoring trace if traceResult containing traceId is returned!
       const connName = store.activeConnection;
       if (connName) {
-        if (navTrigger.db && navTrigger.collection) {
-          router.push({
-            path: `/${connName}/${navTrigger.db}/${navTrigger.collection}`,
-            query: navTrigger.tab ? { tab: navTrigger.tab } : {}
-          });
-        } else if (navTrigger.db) {
-          router.push({
-            path: `/${connName}/${navTrigger.db}`,
-            query: navTrigger.tab ? { tab: navTrigger.tab } : {}
-          });
-        }
+        router.push({
+          path: `/${connName}/monitoring`,
+          query: { tab: 'traces', traceId: traceResult.traceId }
+        });
       }
     }
   } catch (err: any) {

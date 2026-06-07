@@ -44,14 +44,96 @@ While traditional tools like MongoDB Compass offer solid administration, **VibeM
 5. **Full-Stack Feature Parity**
    - Supports Document CRUD, dynamic BSON parsing, complex schema analysis, mass deletion, multi-database connection management, and comprehensive zip-based Backup & Restore workflows.
 
-## How we built it: The Tri-Partner Architecture
+## 🏗️ Architecture & Technology Stack
+
+VibeMongo Admin runs as a unified containerized service hosting both backend API services and frontend assets.
+
+```mermaid
+graph TD
+    subgraph Client [Browser - Vue 3 SPA]
+        Dashboard[Dashboard & Explorer]
+        Chat[Agent Chat Sidebar]
+        Observability[Observability Charts]
+    end
+
+    subgraph Container [Docker Container - Node 20 Server]
+        Express[Express.js Server]
+        SQLite[(SQLite DB - Connections)]
+        NeDB[(NeDB - Telemetry & Stats)]
+        ADK[Google ADK Agent]
+        MongoService[MongoService Driver]
+    end
+
+    subgraph External [External APIs & Subprocesses]
+        Gemini[Gemini API / Vertex AI]
+        MCP[mongodb-mcp-server subprocess]
+        MongoDB[(MongoDB Database)]
+        Phoenix[Arize Phoenix Cloud]
+    end
+
+    Client -- HTTPS & SSE --> Express
+    Express -- Connection Profile --> SQLite
+    Express -- Query DB --> MongoService
+    MongoService --> MongoDB
+    Express -- Telemetry Data --> NeDB
+
+    ADK -- Model Calls --> Gemini
+    ADK -- Execute Tool --> MCP
+    MCP --> MongoDB
+    
+    Express -- Traces/Spans --> Phoenix
+    ADK -- Telemetry Evaluator --> Phoenix
+    Express -- Serve Static Assets --> Client
+```
 
 ![VibeMongo Architecture Diagram](docs/images/vibemongo_architecture_diagram.png)
+
+### Core Integration (The Tri-Partner Architecture)
 
 * **Frontend (UI/UX):** Vue 3 (Composition API) with Vite, styled with modern Element Plus and ECharts. We built a dynamic parsing engine that reads specific JSON blocks outputted by the AI agent to render interactive components on the fly.
 * **Brain (Google Cloud Agent & Gemini):** We utilized the **Google Agent Development Kit (ADK)** and Google's highly capable **Gemini 3.1 Flash-Lite** model on Vertex AI to act as the central reasoning engine.
 * **Execution (MongoDB MCP):** To bridge the AI agent with MongoDB securely, we integrated the official **MongoDB MCP Server** (`mongodb-mcp-server`). The Agent leverages this standardized Model Context Protocol to introspect schemas and execute aggregation pipelines dynamically based on the current active connection.
 * **Observability & Evaluation (Arize Phoenix Cloud & MCP):** We integrated the **Arize Phoenix MCP** and `@arizeai/phoenix-otel` to capture OpenTelemetry traces of both MongoDB operations and LLM reasoning. When the user requests an "AI Judge Evaluation" or "Ask AI to Optimize", the UI fetches the trace data and sends it back to the Gemini Agent to provide human-readable, step-by-step diagnostic feedback directly in the chat interface.
+
+### Technology Stack Components
+
+#### Frontend (Client)
+
+| Component | Technology | Role / Description |
+|-----------|-----------|--------------------|
+| **Framework** | Vue 3 + TypeScript | Core reactive Single Page Application (SPA) using Composition API |
+| **Build Tool** | Vite | Ultra-fast Hot Module Replacement (HMR) and production build pipeline |
+| **UI Library** | Element Plus | Premium component library for modern, dark-mode native dashboard layout |
+| **Charts & Dataviz** | ECharts, Chart.js, vue-echarts | Interactive query results and performance metrics visualization |
+| **State Management** | Pinia | Modular, type-safe global client state stores |
+| **Routing** | Vue Router 4 | Client-side view routing & navigation guards |
+| **HTTP Client** | Axios | RESTful API communication with the backend service |
+| **i18n** | vue-i18n | Multi-language localization support |
+| **Styling** | Sass (SCSS) | CSS preprocessor for custom glassmorphic styling and smooth variables control |
+
+#### Backend (Server)
+
+| Component | Technology | Role / Description |
+|-----------|-----------|--------------------|
+| **Runtime** | Node.js 20+ | Fast, cross-platform JavaScript server runtime |
+| **Framework** | Express 4 | Lightweight REST API endpoint router |
+| **Language** | TypeScript | Strong typing for clean, maintainable backend business logic |
+| **Database Driver** | MongoDB Node.js Driver v6 | Native driver for direct database management and CRUD operations |
+| **Observability DB** | NeDB (`@seald-io/nedb`) | Lightweight, embedded datastore for telemetry, server stats & monitoring |
+| **Connection Store** | SQLite (`sqlite3`) | Encrypted, server-side storage of MongoDB connection profiles |
+| **File Handler** | Multer | Multipart form parser for uploading zip-based database backups |
+
+#### AI Agent & Observability Layer
+
+| Component | Technology | Role / Description |
+|-----------|-----------|--------------------|
+| **Agent SDK** | `@google/adk` v1 | Google Agent Development Kit for AI agent orchestration and tool execution |
+| **LLM Model** | Gemini (via Vertex AI / Google AI Studio) | High-performance reasoning engine for natural-language-to-BSON query translation |
+| **Tool Transport** | MCP stdio subprocess | Secure local execution of the `mongodb-mcp-server` command via standard I/O |
+| **MCP SDK** | `@modelcontextprotocol/sdk` | Node SDK implementing Model Context Protocol JSON-RPC standard |
+| **Database Tools** | `mongodb-mcp-server` (npx) | Official MongoDB MCP tools for schema introspection and pipeline execution |
+| **Telemetry Tools** | `@arizeai/phoenix-mcp` | Trace monitoring integration for real-time trace analysis & DB-Guardian |
+| **Observability APM** | Arize Phoenix Cloud & OpenTelemetry | Telemetry spans capture for LLM evaluations, tracing bottlenecks & query debugging |
 
 ---
 

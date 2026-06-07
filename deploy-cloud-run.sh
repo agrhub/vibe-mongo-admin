@@ -40,7 +40,7 @@ echo "Building and pushing container to Artifact Registry..."
 gcloud builds submit --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:latest
 
 echo "Deploying to Cloud Run..."
-gcloud run deploy vibemongo-admin \
+gcloud run deploy ${IMAGE_NAME}-admin \
   --image=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:latest \
   --region=${REGION} \
   --allow-unauthenticated \
@@ -52,7 +52,7 @@ gcloud run deploy vibemongo-admin \
   --set-env-vars="HOST=0.0.0.0,NODE_ENV=production,PASSWORD=${APP_PASSWORD},ENCRYPTION_KEY=${APP_ENCRYPTION_KEY},AGENT_MODEL=${APP_AGENT_MODEL},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=1,GOOGLE_API_KEY=${GOOGLE_API_KEY},PHOENIX_PROJECT_NAME=${PHOENIX_PROJECT_NAME},PHOENIX_API_KEY=${PHOENIX_API_KEY},PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT}"
 
 echo "Deploying Cloud Run Job for continuous backend monitoring..."
-gcloud run jobs deploy vibemongo-monitor-job \
+gcloud run jobs deploy ${IMAGE_NAME}-monitor-job \
   --image=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:latest \
   --command="npm" \
   --args="run,monitor:prod" \
@@ -63,17 +63,17 @@ gcloud run jobs deploy vibemongo-monitor-job \
   --set-env-vars="HOST=0.0.0.0,NODE_ENV=production,PASSWORD=${APP_PASSWORD},ENCRYPTION_KEY=${APP_ENCRYPTION_KEY},AGENT_MODEL=${APP_AGENT_MODEL},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=1,GOOGLE_API_KEY=${GOOGLE_API_KEY},PHOENIX_PROJECT_NAME=${PHOENIX_PROJECT_NAME},PHOENIX_API_KEY=${PHOENIX_API_KEY},PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT}"
 
 echo "Scheduling background monitoring Cloud Run Job via Cloud Scheduler..."
-if ! gcloud scheduler jobs create http vibemongo-job-scheduler \
+if ! gcloud scheduler jobs create http ${IMAGE_NAME}-job-scheduler \
   --schedule="${JOB_SCHEDULE}" \
-  --uri="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/vibemongo-monitor-job:run" \
+  --uri="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/${IMAGE_NAME}-monitor-job:run" \
   --http-method=POST \
   --oauth-service-account-email="${SERVICE_ACCOUNT}" \
   --location=${REGION} \
   --project=${PROJECT_ID} 2>/dev/null; then
   echo "Scheduler job already exists. Updating configuration..."
-  gcloud scheduler jobs update http vibemongo-job-scheduler \
+  gcloud scheduler jobs update http ${IMAGE_NAME}-job-scheduler \
     --schedule="${JOB_SCHEDULE}" \
-    --uri="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/vibemongo-monitor-job:run" \
+    --uri="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/${IMAGE_NAME}-monitor-job:run" \
     --http-method=POST \
     --oauth-service-account-email="${SERVICE_ACCOUNT}" \
     --location=${REGION} \

@@ -359,6 +359,12 @@ const handleCreateDb = async () => {
     const res = await axios.post(`/api/${store.activeConnection}/db/create`, {
       db_name: newDbName.value
     });
+    if (typeof pendo !== 'undefined') {
+      pendo.track('database_created', {
+        database_name: newDbName.value,
+        connection_name: store.activeConnection
+      });
+    }
     ElMessage.success(res.data.msg || store.t('Database successfully created'));
     showCreateDbDialog.value = false;
     newDbName.value = '';
@@ -395,6 +401,13 @@ const renameDatabase = async () => {
       old_db_name: renameDbModel.oldName,
       new_db_name: renameDbModel.newName
     });
+    if (typeof pendo !== 'undefined') {
+      pendo.track('database_renamed', {
+        old_database_name: renameDbModel.oldName,
+        new_database_name: renameDbModel.newName,
+        connection_name: store.activeConnection
+      });
+    }
     ElMessage.success(res.data.msg || store.t('Database successfully renamed'));
     showRenameDbDialog.value = false;
     await store.fetchSidebar();
@@ -424,6 +437,12 @@ const handleDropDb = (dbName) => {
     loading.value = true;
     try {
       await axios.post(`/api/${store.activeConnection}/db/delete`, { db_name: dbName });
+      if (typeof pendo !== 'undefined') {
+        pendo.track('database_deleted', {
+          database_name: dbName,
+          connection_name: store.activeConnection
+        });
+      }
       ElMessage.success(store.t('Database successfully dropped'));
       await store.fetchSidebar();
       await loadDashboardData();
@@ -446,11 +465,18 @@ const handleUploadBackup = async (options) => {
         'Content-Type': 'multipart/form-data'
       }
     });
+    if (typeof pendo !== 'undefined') {
+      pendo.track('backup_file_uploaded', {
+        connection_name: store.activeConnection,
+        file_name: file.name,
+        file_size: file.size
+      });
+    }
     ElMessage.success(res.data.msg || store.t('Backup successfully uploaded'));
     await loadDashboardData();
   } catch (e) {
-    const msg = e.response && e.response.data && e.response.data.msg 
-      ? e.response.data.msg 
+    const msg = e.response && e.response.data && e.response.data.msg
+      ? e.response.data.msg
       : store.t('Error uploading backup');
     ElMessage.error(msg);
   }
@@ -498,6 +524,14 @@ const confirmRestoreDb = async () => {
       backupFile: restoreTargetBackup.value,
       restoreMode: restoreOptions.restoreMode
     });
+    if (typeof pendo !== 'undefined') {
+      pendo.track('database_backup_restored', {
+        database_name: restoreTargetDb.value,
+        connection_name: store.activeConnection,
+        backup_file: restoreTargetBackup.value,
+        restore_mode: restoreOptions.restoreMode
+      });
+    }
     ElMessage.success(res.data.msg || store.t('Database successfully restored'));
     showRestoreDialog.value = false;
     await store.fetchSidebar();

@@ -571,6 +571,17 @@ const sendChat = async (userText: string, skipAppendUser = false) => {
   store.chartTypeHint = '';
 
   try {
+    if (typeof pendo !== 'undefined') {
+      pendo.track('ai_chat_message_sent', {
+        connection_name: store.activeConnection || '',
+        current_database: store.activeDb || '',
+        current_collection: store.activeColl || '',
+        current_route: route.path,
+        locale: store.activeLocale || 'en',
+        has_chart_type_hint: !!currentCtx.chartTypeHint,
+        message_length: userText.length
+      });
+    }
     const res = await axios.post('/api/agent/chat', {
       message: userText,
       context: currentCtx

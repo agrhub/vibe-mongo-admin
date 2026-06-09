@@ -327,6 +327,18 @@ const handleSaveWebhook = async () => {
       groupWindow: groupWindow.value
     });
 
+    if (typeof pendo !== 'undefined') {
+      pendo.track('webhook_alert_configured', {
+        connection_name: props.conn,
+        has_webhook_url: !!webhookUrl.value,
+        has_email: !!emailAddress.value,
+        slow_queries_enabled: slowQueries.value,
+        system_spikes_enabled: systemSpikes.value,
+        connection_failures_enabled: connectionFailures.value,
+        grouping_enabled: !!enableGrouping.value,
+        group_window: groupWindow.value
+      });
+    }
     ElMessage.success(store.t('Alert settings successfully saved!'));
     savedUrl.value = webhookUrl.value;
     savedEmail.value = emailAddress.value;
@@ -353,8 +365,15 @@ const handleTestWebhook = async () => {
       smtpPass: smtpPass.value,
       smtpSender: smtpSender.value
     });
+    if (typeof pendo !== 'undefined') {
+      pendo.track('webhook_alert_tested', {
+        connection_name: props.conn,
+        webhook_sent: !!res.data.report?.webhookSent,
+        email_sent: !!res.data.report?.emailSent
+      });
+    }
     ElMessage.success(store.t('AI SRE mock incident notification sent successfully!'));
-    
+
     const report = res.data.report;
     if (report.webhookSent) {
       addLog('info', `Webhook dispatch initiated for: ${report.targetUrl}`);
@@ -390,6 +409,11 @@ const handleDeleteWebhook = () => {
     loading.value = true;
     try {
       await axios.post(`/api/${props.conn}/webhooks/delete`);
+      if (typeof pendo !== 'undefined') {
+        pendo.track('webhook_alert_disabled', {
+          connection_name: props.conn
+        });
+      }
       ElMessage.success(store.t('Alert channels successfully disabled'));
       webhookUrl.value = '';
       savedUrl.value = '';

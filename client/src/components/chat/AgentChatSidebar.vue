@@ -86,6 +86,8 @@ import { buildChartOption } from '../../utils/chartBuilder';
 import ChatMessageList from './ChatMessageList.vue';
 import ChatInputBar from './ChatInputBar.vue';
 
+declare var pendo: { trackAgent: (eventType: string, metadata: object) => void };
+
 const localeVoiceMap: Record<string, string> = {
   'vn': 'vi-VN',
   'vi': 'vi-VN',
@@ -107,6 +109,7 @@ const router = useRouter();
 const inputMsg = ref('');
 const thinking = ref(false);
 const listening = ref(false);
+const conversationId = ref(crypto.randomUUID());
 
 const showMentionList = ref(false);
 const mentionQuery = ref('');
@@ -541,7 +544,18 @@ const sendChat = async (userText: string, skipAppendUser = false) => {
     historyList.value.push({ role: 'user', content: userText });
     scrollBottom();
   }
-  
+
+  const promptMessageId = crypto.randomUUID();
+  if (typeof pendo !== 'undefined') {
+    pendo.trackAgent("prompt", {
+      agentId: "VuKXPNIOryBU3fyhfdGN1iq16UY",
+      conversationId: conversationId.value,
+      messageId: promptMessageId,
+      content: userText,
+      suggestedPrompt: skipAppendUser
+    });
+  }
+
   thinking.value = true;
   
   const currentCtx = {
@@ -588,8 +602,8 @@ const sendChat = async (userText: string, skipAppendUser = false) => {
     }
 
     // Append AI bubble
-    const index = historyList.value.push({ 
-      role: 'assistant', 
+    const index = historyList.value.push({
+      role: 'assistant',
       content: assistantMsg,
       chartVisual: chartData,
       databases: databases,
@@ -598,6 +612,15 @@ const sendChat = async (userText: string, skipAppendUser = false) => {
       mongoQuery: res.data.mongoQuery,
       traceResult: traceResult
     }) - 1;
+
+    if (typeof pendo !== 'undefined') {
+      pendo.trackAgent("agent_response", {
+        agentId: "VuKXPNIOryBU3fyhfdGN1iq16UY",
+        conversationId: conversationId.value,
+        messageId: crypto.randomUUID(),
+        content: assistantMsg
+      });
+    }
 
     scrollBottom();
 
@@ -697,7 +720,16 @@ const handleRetry = async (idx: number) => {
 
   // Remove the error assistant bubble
   historyList.value.splice(idx, 1);
-  
+
+  if (typeof pendo !== 'undefined') {
+    pendo.trackAgent("user_reaction", {
+      agentId: "VuKXPNIOryBU3fyhfdGN1iq16UY",
+      conversationId: conversationId.value,
+      messageId: crypto.randomUUID(),
+      content: "retry"
+    });
+  }
+
   // Retry sending the message
   await sendChat(userMsgText, true);
 };
@@ -739,6 +771,7 @@ const handleClearChat = async () => {
   try {
     await axios.delete('/api/agent/session');
     historyList.value = [];
+    conversationId.value = crypto.randomUUID();
     updateWelcomeSuggestions();
     ElMessage.success(store.t('Chat history cleared.'));
   } catch (e) {

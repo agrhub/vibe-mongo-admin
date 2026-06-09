@@ -216,6 +216,12 @@ function openSpan(row) {
 }
 
 function handleAnalyze(traceId) {
+  if (typeof pendo !== 'undefined') {
+    pendo.track('monitoring_trace_evaluated', {
+      connection_name: route.params.conn,
+      trace_id: traceId
+    });
+  }
   activeTraceId.value = traceId;
   // Find matching span from Traces data, or build minimal span from alerts
   const found = phoenixSpansData.value.find(s => s.traceId === traceId);
@@ -258,6 +264,14 @@ watch(
 );
 
 function handleFilterChange(filters) {
+  if (typeof pendo !== 'undefined') {
+    pendo.track('monitoring_traces_searched', {
+      connection_name: route.params.conn,
+      search_query: filters.search || '',
+      status_filter: filters.status || '',
+      kind_filter: filters.kind || ''
+    });
+  }
   activeFilters.value = filters;
   tracesCurrentPage.value = 1;
   fetchPhoenixHealth(filters.search, filters.status, filters.kind);

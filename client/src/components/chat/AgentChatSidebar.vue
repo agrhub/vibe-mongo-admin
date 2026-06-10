@@ -86,8 +86,6 @@ import { buildChartOption } from '../../utils/chartBuilder';
 import ChatMessageList from './ChatMessageList.vue';
 import ChatInputBar from './ChatInputBar.vue';
 
-declare var pendo: { trackAgent: (eventType: string, metadata: object) => void };
-
 const localeVoiceMap: Record<string, string> = {
   'vn': 'vi-VN',
   'vi': 'vi-VN',

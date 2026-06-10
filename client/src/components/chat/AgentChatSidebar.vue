@@ -116,6 +116,8 @@ const mentionActiveIndex = ref(0);
 
 const schemaFieldsCache = reactive<Record<string, Array<{ type: 'field'; label: string; value: string; detail: string }>>>({});
 
+const pendoAgentId = "VxbtknNc61ndSi2KY_fo2C1xr4A";
+
 const mentionOptions = computed(() => {
   const query = mentionQuery.value.toLowerCase().trim();
   const list: Array<{ type: 'db' | 'coll' | 'field'; label: string; value: string; detail?: string }> = [];
@@ -546,7 +548,7 @@ const sendChat = async (userText: string, skipAppendUser = false) => {
   const promptMessageId = crypto.randomUUID();
   if (typeof pendo !== 'undefined') {
     pendo.trackAgent("prompt", {
-      agentId: "VuKXPNIOryBU3fyhfdGN1iq16UY",
+      agentId: pendoAgentId,
       conversationId: conversationId.value,
       messageId: promptMessageId,
       content: userText,
@@ -624,7 +626,7 @@ const sendChat = async (userText: string, skipAppendUser = false) => {
 
     if (typeof pendo !== 'undefined') {
       pendo.trackAgent("agent_response", {
-        agentId: "VuKXPNIOryBU3fyhfdGN1iq16UY",
+        agentId: pendoAgentId,
         conversationId: conversationId.value,
         messageId: crypto.randomUUID(),
         content: assistantMsg
@@ -732,7 +734,7 @@ const handleRetry = async (idx: number) => {
 
   if (typeof pendo !== 'undefined') {
     pendo.trackAgent("user_reaction", {
-      agentId: "VuKXPNIOryBU3fyhfdGN1iq16UY",
+      agentId: pendoAgentId,
       conversationId: conversationId.value,
       messageId: crypto.randomUUID(),
       content: "retry"

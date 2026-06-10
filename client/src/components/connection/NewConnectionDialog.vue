@@ -101,12 +101,6 @@ const saveConnection = async () => {
         conn_name: connForm.name,
         conn_string: connForm.string
       });
-      if (typeof pendo !== 'undefined') {
-        pendo.track('connection_updated', {
-          connection_name: connForm.name,
-          connection_type: 'mongodb'
-        });
-      }
       ElMessage.success(store.t('Connection successfully updated'));
     } else {
       // Add mode
@@ -115,14 +109,6 @@ const saveConnection = async () => {
         string: connForm.string,
         options: connForm.options
       });
-      if (typeof pendo !== 'undefined') {
-        pendo.track('connection_created', {
-          connection_name: connForm.name,
-          connection_type: 'mongodb',
-          has_credentials: connForm.string.includes('@'),
-          app_name: 'VibeMongo'
-        });
-      }
       ElMessage.success(store.t('Connection successfully added'));
     }
     visible.value = false;

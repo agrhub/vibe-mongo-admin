@@ -481,13 +481,6 @@ const createCollection = async () => {
     const res = await axios.post(`/api/${store.activeConnection}/${store.activeDb}/collection/create`, {
       collection_name: newCollName.value
     });
-    if (typeof pendo !== 'undefined') {
-      pendo.track('collection_created', {
-        collection_name: newCollName.value,
-        database_name: store.activeDb,
-        connection_name: store.activeConnection
-      });
-    }
     ElMessage.success(res.data.msg || store.t('Collection successfully created'));
     showCreateCollDialog.value = false;
     newCollName.value = '';
@@ -522,14 +515,6 @@ const renameCollection = async () => {
     const res = await axios.post(`/api/${store.activeConnection}/${store.activeDb}/${renameCollModel.oldName}/rename`, {
       new_collection_name: renameCollModel.newName
     });
-    if (typeof pendo !== 'undefined') {
-      pendo.track('collection_renamed', {
-        old_collection_name: renameCollModel.oldName,
-        new_collection_name: renameCollModel.newName,
-        database_name: store.activeDb,
-        connection_name: store.activeConnection
-      });
-    }
     ElMessage.success(res.data.msg || store.t('Collection successfully renamed'));
     showRenameCollDialog.value = false;
     
@@ -562,13 +547,6 @@ const handleDropColl = (collName) => {
       await axios.post(`/api/${store.activeConnection}/${store.activeDb}/collection/delete`, {
         collection_name: collName
       });
-      if (typeof pendo !== 'undefined') {
-        pendo.track('collection_deleted', {
-          collection_name: collName,
-          database_name: store.activeDb,
-          connection_name: store.activeConnection
-        });
-      }
       ElMessage.success(store.t('Collection successfully deleted'));
       
       await store.fetchSidebar();
@@ -595,13 +573,6 @@ const createDbUser = async () => {
       user_password: userForm.password,
       roles: userForm.roles
     });
-    if (typeof pendo !== 'undefined') {
-      pendo.track('db_user_created', {
-        database_name: store.activeDb,
-        connection_name: store.activeConnection,
-        user_roles: userForm.roles
-      });
-    }
     ElMessage.success(store.t('User successfully created'));
     showCreateUserDialog.value = false;
     userForm.username = '';
@@ -634,12 +605,6 @@ const handleDropUser = (username) => {
       await axios.post(`/api/${store.activeConnection}/${store.activeDb}/user/delete`, {
         username: username
       });
-      if (typeof pendo !== 'undefined') {
-        pendo.track('db_user_deleted', {
-          database_name: store.activeDb,
-          connection_name: store.activeConnection
-        });
-      }
       ElMessage.success(store.t('User successfully dropped'));
       loadDashboardData();
     } catch (e) {
@@ -662,14 +627,6 @@ const confirmBackupDb = async () => {
     const res = await axios.post(`/api/${store.activeConnection}/${store.activeDb}/backup`, {
       keepObjectId: backupOptions.keepObjectId
     });
-    if (typeof pendo !== 'undefined') {
-      pendo.track('database_backup_created', {
-        database_name: store.activeDb,
-        connection_name: store.activeConnection,
-        keep_object_id: backupOptions.keepObjectId,
-        backup_filename: res.data.filename || ''
-      });
-    }
     ElMessage.success(res.data.msg || store.t('Database successfully backed up'));
     showBackupDialog.value = false;
     loadDashboardData();
@@ -694,13 +651,6 @@ const handleUploadBackup = async (options) => {
         'Content-Type': 'multipart/form-data'
       }
     });
-    if (typeof pendo !== 'undefined') {
-      pendo.track('backup_file_uploaded', {
-        connection_name: store.activeConnection,
-        file_name: file.name,
-        file_size: file.size
-      });
-    }
     ElMessage.success(res.data.msg || store.t('Backup successfully uploaded'));
     await loadDashboardData();
   } catch (e) {
@@ -753,14 +703,6 @@ const confirmRestoreDb = async () => {
       backupFile: restoreTargetBackup.value,
       restoreMode: restoreOptions.restoreMode
     });
-    if (typeof pendo !== 'undefined') {
-      pendo.track('database_backup_restored', {
-        database_name: restoreTargetDb.value,
-        connection_name: store.activeConnection,
-        backup_file: restoreTargetBackup.value,
-        restore_mode: restoreOptions.restoreMode
-      });
-    }
     ElMessage.success(res.data.msg || store.t('Database successfully restored'));
     showRestoreDialog.value = false;
     await store.fetchSidebar();

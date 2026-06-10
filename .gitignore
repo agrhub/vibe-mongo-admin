@@ -37,3 +37,4 @@ server/src/scratch_test.ts
 server/data/
 server/src/scratch-list-tools.ts
 server/dist/scratch-list-tools.js
+client/dist

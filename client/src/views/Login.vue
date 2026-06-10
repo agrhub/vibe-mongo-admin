@@ -276,13 +276,6 @@ const handleLogin = async () => {
   loggingIn.value = false;
 
   if (result.success) {
-    if (typeof pendo !== 'undefined') {
-      pendo.track('user_login_completed', {
-        app_name: 'VibeMongo',
-        login_success: true,
-        locale: store.activeLocale || 'en'
-      });
-    }
     ElMessage.success(store.t('Logged in successfully'));
     router.push('/');
   } else {

@@ -304,16 +304,6 @@ const runIndexSanitizer = async () => {
   try {
     const res = await axios.post(`/api/${conn}/${db}/${coll}/indexes/ai-sanitize`);
     sanitizerResult.value = res.data;
-    if (typeof pendo !== 'undefined') {
-      pendo.track('index_ai_sanitized', {
-        collection_name: coll,
-        database_name: db,
-        connection_name: conn,
-        health_score: res.data?.healthScore || 0,
-        redundant_index_count: res.data?.redundantCount || 0,
-        status: res.data?.status || 'completed'
-      });
-    }
     showSanitizerDashboard.value = true;
   } catch (e) {
     console.error('Error running sanitizer:', e);
@@ -413,16 +403,6 @@ const createIndex = async () => {
       unique: indexForm.unique,
       sparse: indexForm.sparse
     });
-    if (typeof pendo !== 'undefined') {
-      pendo.track('index_created', {
-        collection_name: coll,
-        database_name: db,
-        connection_name: conn,
-        index_keys: indexForm.keys,
-        is_unique: indexForm.unique,
-        is_sparse: indexForm.sparse
-      });
-    }
     ElMessage.success(store.t('Index successfully created'));
     showDialog.value = false;
     loadIndexes();
@@ -485,14 +465,6 @@ const handleDropIndex = (indexName: string) => {
       await axios.post(`/api/${conn}/${db}/${coll}/index/drop`, {
         index_name: indexName
       });
-      if (typeof pendo !== 'undefined') {
-        pendo.track('index_dropped', {
-          collection_name: coll,
-          database_name: db,
-          connection_name: conn,
-          index_name: indexName
-        });
-      }
       ElMessage.success(store.t('Index successfully dropped'));
       loadIndexes();
     } catch (e) {

@@ -239,14 +239,6 @@ async function fetchAIAnalysis() {
       option: buildChartOption(chart, chart.results || [], chartTheme.value === 'dark')
     }));
     insightsText.value = res.data.insights || '';
-    if (typeof pendo !== 'undefined') {
-      pendo.track('database_ai_analysis_completed', {
-        database_name: store.activeDb,
-        connection_name: store.activeConnection,
-        has_custom_prompt: !!customPrompt.value,
-        chart_count: (res.data.charts || []).length
-      });
-    }
   } catch (e: any) {
     console.error(e);
     ElMessage.error(store.t('Error running database analysis: ') + (e.response?.data?.msg || e.message));

@@ -26,10 +26,3 @@ app.use(ElementPlus);
 app.use(router);
 
 app.mount('#app');
-
-// Initialize Pendo with anonymous visitor
-pendo.initialize({
-  visitor: {
-    id: ''
-  }
-});

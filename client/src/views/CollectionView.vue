@@ -424,15 +424,6 @@ const bulkDelete = () => {
         `/api/${store.activeConnection}/${store.activeDb}/${store.activeColl}/document/mass_delete`,
         { query: queryStr }
       );
-      if (typeof pendo !== 'undefined') {
-        pendo.track('documents_bulk_deleted', {
-          collection_name: store.activeColl,
-          database_name: store.activeDb,
-          connection_name: store.activeConnection,
-          deleted_count: res.data.deletedCount || 0,
-          deletion_method: 'selected'
-        });
-      }
       ElMessage.success(res.data.msg || store.t('Documents successfully deleted'));
       clearSelection();
       loadDocuments();
@@ -475,18 +466,6 @@ async function loadDocuments() {
     });
     documents.value = res.data.data || [];
     totalDocs.value = res.data.total_docs || 0;
-    if (typeof pendo !== 'undefined') {
-      pendo.track('document_query_executed', {
-        collection_name: coll,
-        database_name: db,
-        connection_name: conn,
-        has_query_filter: !!queryString.value,
-        has_column_filters: Object.keys(columnFilters.value).length > 0,
-        has_sort: !!activeSort.value,
-        results_count: res.data.total_docs || 0,
-        docs_per_page: docsPerPage.value
-      });
-    }
     queryError.value = res.data.validQuery === false
       ? (res.data.queryMessage || store.t('Invalid MongoDB Query syntax'))
       : '';
@@ -506,14 +485,6 @@ const resetQuery        = ()     => { queryString.value = ''; queryError.value =
 // ── Export ────────────────────────────────────────────────────────
 const handleExportCollection = () => {
   const { conn, db, coll } = route.params;
-  if (typeof pendo !== 'undefined') {
-    pendo.track('collection_exported', {
-      collection_name: coll,
-      database_name: db,
-      connection_name: conn,
-      exclude_id: false
-    });
-  }
   window.open(`/api/${conn}/${db}/${coll}/export?excludedID=false`, '_blank');
 };
 
@@ -525,13 +496,6 @@ const handleDeleteDoc = async (docId) => {
       `/api/${store.activeConnection}/${store.activeDb}/${store.activeColl}/document/delete`,
       { doc_id: docId }
     );
-    if (typeof pendo !== 'undefined') {
-      pendo.track('document_deleted', {
-        collection_name: store.activeColl,
-        database_name: store.activeDb,
-        connection_name: store.activeConnection
-      });
-    }
     ElMessage.success(store.t('Document successfully deleted'));
     loadDocuments();
     store.fetchSidebar();
@@ -561,15 +525,6 @@ const handleMassDelete = () => {
         `/api/${store.activeConnection}/${store.activeDb}/${store.activeColl}/document/mass_delete`,
         { query: queryString.value }
       );
-      if (typeof pendo !== 'undefined') {
-        pendo.track('documents_bulk_deleted', {
-          collection_name: store.activeColl,
-          database_name: store.activeDb,
-          connection_name: store.activeConnection,
-          deleted_count: res.data.deletedCount || 0,
-          deletion_method: 'query'
-        });
-      }
       ElMessage.success(res.data.msg || store.t('Documents successfully deleted'));
       resetQuery();
       store.fetchSidebar();
@@ -604,16 +559,6 @@ const handleGenerateMockData = async () => {
       locale: mockLocale.value,
       constraints: mockConstraints.value
     });
-    if (typeof pendo !== 'undefined') {
-      pendo.track('mock_data_generated', {
-        collection_name: coll,
-        database_name: db,
-        connection_name: conn,
-        document_count: mockDocCount.value,
-        locale: mockLocale.value,
-        has_constraints: !!mockConstraints.value
-      });
-    }
     ElMessage.success(res.data.msg || store.t('Mock documents successfully generated'));
     mockDialogVisible.value = false;
     loadDocuments();

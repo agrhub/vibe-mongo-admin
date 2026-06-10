@@ -81,12 +81,6 @@ export const useAppStore = defineStore('app', {
       try {
         await axios.post('/api/auth/login', { password });
         this.loggedIn = true;
-        pendo.identify({
-          visitor: {
-            id: '',
-            loggedIn: true
-          }
-        });
         return { success: true };
       } catch (e) {
         const msg = e.response && e.response.data && e.response.data.msg
@@ -100,7 +94,6 @@ export const useAppStore = defineStore('app', {
       try {
         await axios.post('/api/auth/logout');
         this.loggedIn = false;
-        pendo.clearSession();
         return { success: true };
       } catch (e) {
         console.error('Error logging out:', e);

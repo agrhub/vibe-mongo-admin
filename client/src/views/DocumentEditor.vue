@@ -220,26 +220,12 @@ const handleSave = async () => {
       const res = await axios.post(`/api/${conn}/${db}/${coll}/document/edit`, {
         objectData: documentBson.value
       });
-      if (typeof pendo !== 'undefined') {
-        pendo.track('document_updated', {
-          collection_name: coll,
-          database_name: db,
-          connection_name: conn
-        });
-      }
       ElMessage.success(res.data.msg || store.t('Document successfully saved'));
     } else {
       // Insert save
       const res = await axios.post(`/api/${conn}/${db}/${coll}/document/insert`, {
         objectData: documentBson.value
       });
-      if (typeof pendo !== 'undefined') {
-        pendo.track('document_inserted', {
-          collection_name: coll,
-          database_name: db,
-          connection_name: conn
-        });
-      }
       ElMessage.success(res.data.msg || store.t('Document successfully inserted'));
     }
     goBack();

@@ -196,14 +196,6 @@ const fetchSuggestions = async () => {
     });
     if (res.data?.success && Array.isArray(res.data.suggestions) && res.data.suggestions.length > 0) {
       quickTemplates.value = res.data.suggestions;
-      if (typeof pendo !== 'undefined') {
-        pendo.track('migration_suggestions_generated', {
-          collection_name: coll,
-          database_name: db,
-          connection_name: conn,
-          suggestion_count: res.data.suggestions.length
-        });
-      }
     } else {
       quickTemplates.value = [];
     }
@@ -404,16 +396,6 @@ const runDryRun = async () => {
     );
     if (res.data?.success && res.data.result) {
       dryRunResult.value = res.data.result;
-      if (typeof pendo !== 'undefined') {
-        pendo.track('schema_migration_dry_run_completed', {
-          collection_name: route.params.coll,
-          database_name: route.params.db,
-          connection_name: route.params.conn,
-          has_impacted_relations: !!(res.data.result.impactedRelations?.length),
-          pipeline_step_count: res.data.result.pipeline?.length || 0,
-          locale: store.activeLocale
-        });
-      }
       ElMessage.success(store.t('Safe dry-run preview populated successfully.'));
     }
   } catch (e: any) {
@@ -476,16 +458,6 @@ const confirmBulkExecution = () => {
         }
       );
       if (res.data?.success) {
-        if (typeof pendo !== 'undefined') {
-          pendo.track('schema_migration_executed', {
-            collection_name: route.params.coll,
-            database_name: route.params.db,
-            connection_name: route.params.conn,
-            pipeline_step_count: dryRunResult.value?.pipeline?.length || 0,
-            coordinated_collection_count: coordinatedUpdates.length,
-            modified_count: res.data.modifiedCount || 0
-          });
-        }
         ElMessage.success(res.data.msg || store.t('Schema migration completed successfully!'));
         dryRunResult.value = null;
         migrationPrompt.value = '';

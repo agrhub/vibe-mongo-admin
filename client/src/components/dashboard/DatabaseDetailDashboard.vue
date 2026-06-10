@@ -712,6 +712,12 @@ const handleUploadBackup = async (options) => {
 };
 
 const handleDownloadBackup = (backupName) => {
+  if (typeof pendo !== 'undefined') {
+    pendo.track('backup_file_downloaded', {
+      connection_name: store.activeConnection,
+      backup_name: backupName
+    });
+  }
   window.open(`/api/${store.activeConnection}/backup/${encodeURIComponent(backupName)}/download`, '_blank');
 };
 
@@ -727,6 +733,12 @@ const handleDeleteBackup = (backupName) => {
   ).then(async () => {
     try {
       await axios.delete(`/api/${store.activeConnection}/backup/${encodeURIComponent(backupName)}`);
+      if (typeof pendo !== 'undefined') {
+        pendo.track('backup_file_deleted', {
+          connection_name: store.activeConnection,
+          backup_name: backupName
+        });
+      }
       ElMessage.success(store.t('Backup file deleted successfully'));
       await loadDashboardData();
     } catch(e) {
